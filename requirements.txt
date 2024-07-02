@@ -1,0 +1,10 @@
+feedparser
+requests
+beautifulsoup4
+python-dotenv
+jinja2
+Pillow
+playwright
+youtube_transcript_api
+opencc-python-reimplemented
+pangu
