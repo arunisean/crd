@@ -159,7 +159,7 @@ def process_articles(csv_file, output_folder, keywords):
         executor.map(lambda row: process_single_article(row, output_folder, keywords), articles)
 
 if __name__ == "__main__":
-    opml_file = 'feeds.opml'
+    opml_file = 'research.opml'
     urls = extract_urls_from_opml(opml_file)
     articles = fetch_all_articles(urls)
     
