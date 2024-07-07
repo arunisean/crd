@@ -15,9 +15,21 @@ import opencc
 
 load_dotenv()
 KEYWORDS = os.getenv("KEYWORDS").split(',')
-THREADS = int(os.getenv("THREADS", 10))
+strTHREADS = os.getenv("THREADS")
+try:
+    THREADS = int(strTHREADS)
+except (ValueError, TypeError) as e:
+    print(f"Error converting {strTHREADS} to int: {e}")
+    THREADS = 1 
 DATE_RANGE_DAYS = int(os.getenv("DATE_RANGE_DAYS", 7))
 
+headers = {
+    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
+    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
+    'Accept-Language': 'en-US,en;q=0.5',
+    'Accept-Encoding': 'gzip, deflate, br',
+    'Connection': 'keep-alive'
+}
 # 初始化 opencc 转换器
 cc = opencc.OpenCC('s2t')  # 简体到繁体
 cc_tw = opencc.OpenCC('s2tw')  # 简体到台湾繁体
@@ -39,8 +51,10 @@ def fetch_articles_from_rss(url):
     articles = []
     try:
         print(f"Fetching articles from {url}...")
-        response = requests.get(url, timeout=10)
+        response = requests.get(url,headers=headers, timeout=10)
+
         feed = feedparser.parse(response.content)
+        #print(f"feed from {url}: {feed.entries}")
         date_range = datetime.now() - timedelta(days=DATE_RANGE_DAYS)
         
         for entry in feed.entries:
@@ -52,6 +66,7 @@ def fetch_articles_from_rss(url):
                     'date': published_date.strftime('%Y-%m-%d')
                 }
                 articles.append(article)
+                print(f"Add {article} to Article list")
     except Exception as e:
         print(f"Error fetching articles from {url}: {e}")
     return articles
@@ -73,8 +88,7 @@ def fetch_html_content(url):
         elif not url.startswith(('http://', 'https://')):
             url = 'http://' + url
         
-        # 发送 HTTP 请求获取 HTML 内容
-        response = requests.get(url, timeout=10)
+        response = requests.get(url, headers=headers,timeout=10)
         response.raise_for_status()
         return response.text
     except Exception as e:
@@ -159,7 +173,7 @@ def process_articles(csv_file, output_folder, keywords):
         executor.map(lambda row: process_single_article(row, output_folder, keywords), articles)
 
 if __name__ == "__main__":
-    opml_file = 'research.opml'
+    opml_file = 'CryptoNews.opml'
     urls = extract_urls_from_opml(opml_file)
     articles = fetch_all_articles(urls)
     

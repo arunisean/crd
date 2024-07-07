@@ -3,3 +3,6 @@
 archives/
 .env
 research.opml
+*.opml
+*.criteria
+*.md
