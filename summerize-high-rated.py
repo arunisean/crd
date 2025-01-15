@@ -45,7 +45,7 @@ def get_chinese_title_and_summary(title, content, url):
     
     # Translate title
     title_payload = {
-        "model": "gpt-4o",  # Updated model
+        "model": "gpt-4o-mini",  # Updated model
         "messages": [
             {"role": "system", "content": "You are a translator. Translate the given title to Chinese (zh-CN). Output only the translated title without any additional text."},
             {"role": "user", "content": f"Translate this title to Chinese:\n\n{title}"}
@@ -54,7 +54,7 @@ def get_chinese_title_and_summary(title, content, url):
     
     # Summarize and translate content
     content_payload = {
-        "model": "gpt-4o",  # Updated model
+        "model": "gpt-4o-mini",  # Updated model
         "messages": [
             {"role": "system", "content": "You are an AI assistant that summarizes articles in Chinese (zh-CN). Provide a concise summary in about 3-5 sentences in Chinese."},
             {"role": "user", "content": f"Summarize the following article in Chinese (zh-CN):\n\nTitle: {title}\n\nContent:\n{content}"}

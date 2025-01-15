@@ -1,72 +1,126 @@
-## Project Introduction
+# RSS Content Digest System
 
-This project is an automated system for processing and generating newsletters. It retrieves articles from RSS feeds, performs rating and generates summaries, and ultimately creates an HTML newsletter with article summaries.
+A sophisticated system for aggregating, filtering, rating, summarizing, and delivering content from RSS feeds with a focus on Chinese language support.
 
-## File Structure
+## Features
 
-- main.py: Main script that runs other scripts sequentially.
-- rss_digest.py: Retrieves articles from RSS feeds and saves them as CSV files.
-- rating-openai.py: Rates the articles using a custom API and copies high-rated articles to a specified directory.
-- summerize-high-rated.py: Generates summaries for high-rated articles and saves them.
-- make_newsletter.py: Generates an HTML newsletter with article summaries.
-- renderpng.py: Renders the HTML newsletter as a PNG image.
-- cleanup.py: Cleans up generated files and directories and creates an archive.
+- RSS Feed Aggregation
+  - Reads RSS feeds from OPML configuration
+  - Supports both article content and YouTube videos
+  - Multi-threaded feed fetching for improved performance
+  - Keyword-based content filtering
 
-## Environment Setup
+- Content Processing
+  - Extracts article content from web pages
+  - Retrieves YouTube video transcripts
+  - Supports Chinese text conversion (Simplified/Traditional/Hong Kong/Taiwan variants)
+  - Proper Chinese text spacing using Pangu
 
-Dependency Installation
+- AI-Powered Analysis
+  - Rates articles using OpenAI's GPT models
+  - Generates Chinese summaries for high-rated content
+  - Translates titles to Chinese
+  - Creates concise 3-5 sentence summaries
 
-Make sure the following dependencies are installed. You can use the following command to install them:
+- Newsletter Generation
+  - Creates formatted newsletters from processed content
+  - Generates PNG renderings of content
+  - Automated cleanup of temporary files
 
+## System Requirements
+
+Python 3.8 or higher required.
+
+Python packages required:
+- feedparser - RSS feed parsing
+- requests - HTTP requests
+- beautifulsoup4 - HTML parsing
+- python-dotenv - Environment variable management
+- jinja2 - HTML templating
+- Pillow - Image processing
+- playwright - Web automation
+- youtube_transcript_api - YouTube transcript retrieval
+- opencc-python-reimplemented - Chinese text conversion
+- pangu - Chinese text spacing
+
+## Installation
+
+1. Clone the repository:
+```bash
+git clone https://github.com/your-repo/rss-digest.git
+cd rss-digest
+```
+
+2. Create and activate a virtual environment:
+```bash
+python -m venv venv
+source venv/bin/activate  # On Windows use: venv\Scripts\activate
+```
+
+3. Install required packages:
 ```bash
 pip install -r requirements.txt
+```
+
+4. Install Playwright browsers:
+```bash
 playwright install
 ```
 
-### Environment Variables
-
-Create a `.env` file in the project root directory and add the following content:
-
+5. Verify installation:
+```bash
+python -c "import feedparser, requests, bs4, dotenv, jinja2, PIL, playwright, youtube_transcript_api, opencc, pangu; print('All packages installed successfully')"
 ```
-CUSTOM_API_URL=https://api.openai.com/v1/chat/completions  # URL of the custom OpenAI compatible API for article rating and summarization
-API_KEY=your_api_key  # API key to access the custom API
-RATING_CRITERIA=your_rating_criteria  # Criteria or rules for article rating
-TOP_ARTICLES=5  # Number of top-rated articles to select
-NEWSLETTER_TITLE=Article Summary Newsletter  # Title of the generated newsletter
-NEWSLETTER_FONT=Arial, sans-serif  # Font used in the newsletter
-WIDTH=800  # Width for rendering the HTML newsletter
-KEYWORDS=keyword1,keyword2  # Keywords used for filtering articles (comma-separated)
-THREADS=10  # Number of threads used for concurrent processing of RSS feeds
-DATE_RANGE_DAYS=7  # Date range (in days) for retrieving articles from RSS feeds
-```
+
+## Environment Variables
+
+Required environment variables:
+- KEYWORDS - Comma-separated list of keywords for content filtering
+- THREADS - Number of threads for parallel processing
+- DATE_RANGE_DAYS - Number of days of content to process (default: 3)
+- CUSTOM_API_URL - OpenAI API endpoint
+- API_KEY - OpenAI API key
+
+## Workflow
+
+1. RSS Feed Processing (`rss_digest.py`)
+   - Reads RSS feeds from OPML file
+   - Filters content by date and keywords
+   - Saves articles to text files
+
+2. Content Rating (`rating-openai.py`)
+   - Rates articles using AI
+   - Identifies high-value content
+
+3. Content Summarization (`summerize-high-rated.py`)
+   - Translates titles to Chinese
+   - Generates Chinese summaries
+   - Applies proper text spacing
+
+4. Newsletter Creation (`make_newsletter.py`)
+   - Creates formatted newsletter
+   - Includes translated titles and summaries
+
+5. Visual Rendering (`renderpng.py`)
+   - Generates PNG versions of content
+
+6. Cleanup (`cleanup.py`)
+   - Removes temporary files
+   - Maintains system organization
 
 ## Usage
 
-### Preparation
-
-Save your subscription OPML file in the current directory and rename it to `feeds.opml`.
-
-### Running the Main Script
-
-Run the following command in the project root directory:
-
+Run the entire pipeline:
 ```bash
-python3 main.py
+python main.py
 ```
 
-This command will run all the sub-scripts sequentially, performing the entire process from article retrieval to rating, summarization, and newsletter generation.
+This will execute all components in sequence, processing RSS feeds through to final newsletter generation.
 
-### Notes
+## Output
 
-- Make sure to configure the environment variables correctly before running the scripts.
-- Internet connectivity may be required during the execution to access RSS feeds and the custom API.
-- The default script uses OpenAI's GPT-3.5-Turbo model for rating. If you want to use a different model, modify the `model` variable in `rating-openai.py`.
-- The default script uses OpenAI's GPT-4o model for summarization. If you want to use a different model, modify the `model` variable in `summerize-high-rated.py`.
-
-### Contributing
-
-Pull requests and issue reports are welcome. Feel free to reach out with any suggestions or improvements.
-
-### License
-
-This project is licensed under the MIT License. See the LICENSE file for more details.
+- `articles.csv` - List of fetched articles
+- `articles_text/` - Extracted article content
+- `high_rated_articles/` - Filtered high-quality content
+- `article_summaries/` - Chinese summaries
+- `article_summaries.json` - JSON format of all processed content

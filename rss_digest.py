@@ -21,7 +21,7 @@ try:
 except (ValueError, TypeError) as e:
     print(f"Error converting {strTHREADS} to int: {e}")
     THREADS = 1 
-DATE_RANGE_DAYS = int(os.getenv("DATE_RANGE_DAYS", 7))
+DATE_RANGE_DAYS = int(os.getenv("DATE_RANGE_DAYS", 3))
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
