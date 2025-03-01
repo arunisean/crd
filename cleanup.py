@@ -59,7 +59,7 @@ def main():
 
     # Create zip filename with current date and time
     current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-    zip_filename = os.path.join(archives_dir, f"archive_{current_time}.zip")
+    #zip_filename = os.path.join(archives_dir, f"archive_{current_time}.zip")
 
     # Create output folder with current date and time
     output_folder = os.path.join("output", current_time)
@@ -67,8 +67,8 @@ def main():
     copy_to_output_folder(output_folder, items_to_copy)
 
     # Zip files and folders
-    print(f"Creating zip file: {zip_filename}")
-    zip_files_and_folders(zip_filename, items)
+    #print(f"Creating zip file: {zip_filename}")
+    #zip_files_and_folders(zip_filename, items)
 
     # Remove original files and folders
     print("Removing original files and folders")
@@ -77,7 +77,7 @@ def main():
     # Update .gitignore
     update_gitignore()
 
-    print(f"Cleanup complete. Archive created: {zip_filename}")
+    #print(f"Cleanup complete. Archive created: {zip_filename}")
 
 if __name__ == "__main__":
     main()

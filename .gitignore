@@ -6,3 +6,11 @@ research.opml
 *.opml
 *.criteria
 *.md
+article_ratings.json
+article_summaries.json
+articles.csv
+newsletter.html
+newsletter.png
+titles_and_links.txt
+*.txt
+*.jpg

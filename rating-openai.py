@@ -29,7 +29,7 @@ def extract_score(content):
 def replace_score(content, new_score):
     score_pattern = re.compile(r'Article Score: (\d+(\.\d+)?)\s*out of 10\nRated on: [^\n]+')
     timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    new_score_line = f"Article Score: {new_score} out of 10\nRated on: {timestamp}"
+    new_score_line = f"Article Score: {new_score} out of 100\nRated on: {timestamp}"
     if score_pattern.search(content):
         return score_pattern.sub(new_score_line, content)
     else:
@@ -42,9 +42,9 @@ def get_article_rating(content):
     }
     
     payload = {
-        "model": "gpt-3.5-turbo",
+        "model": "gpt-4o",
         "messages": [
-            {"role": "system", "content": f"You are an AI assistant that rates articles strictly based on the criteria: '{RATING_CRITERIA}'. First, determine if the article strictly matches the criteria. If it does not, respond with 'Not relevant'. If it matches, rate the article based on its value in 'X out of 100' format, where X is a number from 1 to 10."},
+            {"role": "system", "content": f"You are an AI assistant that rates articles strictly based on the criteria: '{RATING_CRITERIA}'.Rate the article based on its value in 'X out of 100' format, where X is a number from 1 to 100."},
             {"role": "user", "content": f"Rate the following article:\n\n{content}"}
         ]
     }
@@ -54,9 +54,8 @@ def get_article_rating(content):
         response.raise_for_status()
         raw_rating = response.json()['choices'][0]['message']['content'].strip()
         print(f"Raw rating response: {raw_rating}")  # Add this line for debugging
-        if raw_rating.lower() == "not relevant":
-            return None
-        match = re.search(r'(\d+(\.\d+)?)\s*out of 10', raw_rating)
+        
+        match = re.search(r'(\d+(\.\d+)?)\s*out of 100', raw_rating)
         if match:
             return f"{match.group(1)}"
         else:
