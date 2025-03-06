@@ -11,6 +11,7 @@ load_dotenv()
 CUSTOM_API_URL = os.getenv("CUSTOM_API_URL")
 API_KEY = os.getenv("API_KEY")
 RATING_CRITERIA = os.getenv("RATING_CRITERIA")
+RATING_CRITERIA_FILE = os.getenv("RATING_CRITERIA_FILE")
 TOP_ARTICLES = int(os.getenv("TOP_ARTICLES", 5))
 
 def read_article(file_path):
@@ -43,7 +44,7 @@ def get_article_rating(content):
     payload = {
         "model": "gpt-3.5-turbo",
         "messages": [
-            {"role": "system", "content": f"You are an AI assistant that rates articles strictly based on the criteria: '{RATING_CRITERIA}'. First, determine if the article strictly matches the criteria. If it does not, respond with 'Not relevant'. If it matches, rate the article based on its value in 'X out of 10' format, where X is a number from 1 to 10."},
+            {"role": "system", "content": f"You are an AI assistant that rates articles strictly based on the criteria: '{RATING_CRITERIA}'. First, determine if the article strictly matches the criteria. If it does not, respond with 'Not relevant'. If it matches, rate the article based on its value in 'X out of 100' format, where X is a number from 1 to 10."},
             {"role": "user", "content": f"Rate the following article:\n\n{content}"}
         ]
     }
