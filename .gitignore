@@ -6,3 +6,6 @@ research.opml
 *.opml
 *.criteria
 *.md
+crd/__pycache__/*
+Output/*
+*.pyc

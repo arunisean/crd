@@ -10,6 +10,8 @@ from crd.utils.config import Config
 from crd.renderer import NewsletterRenderer
 from crd.utils.logging import setup_logger
 
+logger = setup_logger(__name__)
+
 # Load environment variables
 load_dotenv()
 
@@ -94,11 +96,11 @@ def is_url_reachable(url):
 def write_titles_and_links(summaries, output_file):
     with open(output_file, 'w', encoding='utf-8') as f:
         for data in summaries.values():
-            f.write(f"{data['chinese_title']}\n{data['url']}\n\n")
+            f.write(f"{data['chinese_title']}\\n{data['url']}\\n\\n")
 
 def main():
     # Load article summaries
-    with open('article_summaries.json', 'r', encoding='utf-8') as f:
+    with open('output/article_summaries.json', 'r', encoding='utf-8') as f:
         summaries = json.load(f)
 
     # Create thumbnails directory
@@ -114,8 +116,10 @@ def main():
             safe_filename = sanitize_filename(filename)
             thumbnail_filename = os.path.join(thumbnails_dir, f"{safe_filename.replace('.txt', '.jpg')}")
             if download_thumbnail(thumbnail_url, thumbnail_filename):
+                logger.info(f"Thumbnail downloaded: {thumbnail_filename}")
                 data['thumbnail'] = os.path.relpath(thumbnail_filename)
             else:
+                logger.warning(f"Failed to download thumbnail from {thumbnail_url}")
                 data['thumbnail'] = None
         else:
             data['thumbnail'] = None
@@ -132,10 +136,11 @@ def main():
     template = env.get_template('newsletter_template.html')
 
     newsletter_html = template.render(articles=summaries.values(), title=title, font=font)
-
-    # Save the newsletter
+# Save the newsletter
+    logger.info("Saving newsletter to newsletter.html")
     with open('newsletter.html', 'w', encoding='utf-8') as f:
         f.write(newsletter_html)
+    logger.info("Newsletter saved to newsletter.html")
 
     # Write titles and links to a text file
     write_titles_and_links(summaries, 'titles_and_links.txt')

@@ -51,13 +51,7 @@ def main():
         "article_summaries",
         "articles_text",
         "high_rated_articles",
-        "thumbnails",
-        "article_ratings.json",
-        "article_summaries.json",
         "articles.csv",
-        "newsletter.html",
-        "titles_and_links.txt",
-        "newsletter.png"
     ]
     
     items_to_copy = [

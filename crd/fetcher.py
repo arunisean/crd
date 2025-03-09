@@ -87,12 +87,14 @@ class ArticleFetcher:
                 url = 'http:' + url  # Add 'http:' prefix to URLs starting with '//'
             elif not url.startswith(('http://', 'https://')):
                 url = 'http://' + url
-            
-            response = self.http_client.get(url, timeout=10)
+            logger.info(f"Fetching HTML content from {url}")
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}
+            response = self.http_client.get(url, timeout=10, headers=headers)
             response.raise_for_status()
+            logger.info(f"Response status code: {response.status_code}")
             return response.text
         except Exception as e:
-            logger.error(f"Error fetching HTML content from {url}: {e}")
+            logger.error(f"Error fetching HTML content from {url}: {e}, URL: {url}")
             return None
     
     def extract_article_content(self, html):

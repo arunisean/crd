@@ -17,14 +17,19 @@ class Config:
         self.translation_model = os.getenv("TRANSLATION_MODEL", "gpt-4o")
         
         # Content settings
-        self.rating_criteria = os.getenv("RATING_CRITERIA", "")
+        rating_criteria_path = os.getenv("RATING_CRITERIA", "")
+        if os.path.isfile(rating_criteria_path):
+            with open(rating_criteria_path, 'r') as f:
+                self.rating_criteria = f.read().strip()
+        else:
+            self.rating_criteria = rating_criteria_path
         self.top_articles = int(os.getenv("TOP_ARTICLES", 5))
         self.keywords = os.getenv("KEYWORDS", "").split(',')
         self.opml_file = os.getenv("OPML_FILE", "feeds.opml")
         
         # Newsletter settings
         self.newsletter_title = os.getenv("NEWSLETTER_TITLE", "Article Summary Newsletter")
-        self.newsletter_font = os.getenv("NEWSLETTER_FONT", "Arial, sans-serif")
+        self.newsletter_font = "Arial, sans-serif"
         self.newsletter_template = os.getenv("NEWSLETTER_TEMPLATE", "newsletter_template.html")
         self.width = int(os.getenv("WIDTH", 800))
         

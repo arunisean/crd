@@ -3,6 +3,7 @@ import logging
 import re
 from concurrent.futures import ThreadPoolExecutor
 import pangu
+from urllib.parse import urlparse
 from .utils.io import read_file, write_file, write_json
 
 logger = logging.getLogger(__name__)
@@ -100,7 +101,8 @@ class ArticleSummarizer:
                     "url": url,
                     "original_title": title,
                     "chinese_title": chinese_title,
-                    "chinese_summary": chinese_summary
+                    "chinese_summary": chinese_summary,
+                    "source": urlparse(url).netloc
                 }
         
         logger.warning(f"Failed to get Chinese title and summary for {filename}")

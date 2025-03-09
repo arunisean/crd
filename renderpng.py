@@ -51,7 +51,9 @@ def render_html_to_png(html_file_path, output_png_path):
     image = image.crop((0, 0, WIDTH * DEVICE_PIXEL_RATIO, height * DEVICE_PIXEL_RATIO))
     image.save(output_png_path)
 
+import sys
+
 if __name__ == "__main__":
-    html_file_path = "newsletter.html"  # Path to your HTML file
-    output_png_path = "newsletter.png"  # Path to save the PNG file
+    html_file_path = sys.argv[1]  # Path to your HTML file
+    output_png_path = sys.argv[2]  # Path to save the PNG file
     render_html_to_png(html_file_path, output_png_path)

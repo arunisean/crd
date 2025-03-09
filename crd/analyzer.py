@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 class ArticleAnalyzer:
     """Analyzes and rates articles"""
     
-    def __init__(self, api_client, rating_criteria, top_articles=5, max_workers=10, model="gpt-3.5-turbo"):
+    def __init__(self, api_client, config, top_articles=5, max_workers=10, model="gpt-3.5-turbo"):
         self.api_client = api_client
-        self.rating_criteria = rating_criteria
+        self.rating_criteria = config.rating_criteria
         self.top_articles = top_articles
         self.max_workers = max_workers
         self.model = model  # Store model parameter
@@ -125,5 +125,11 @@ class ArticleAnalyzer:
         # Save ratings to file
         if write_json(ratings_file, results):
             logger.info(f"Ratings saved to {ratings_file}")
+        
+        # Save top articles with scores to a file
+        top_articles_file = os.path.join(os.path.dirname(ratings_file), "top_articles.json")
+        top_articles_with_scores = [{"filename": filename, "score": score} for filename, score in top_articles]
+        if write_json(top_articles_file, top_articles_with_scores):
+            logger.info(f"Top articles saved to {top_articles_file}")
         
         return top_articles

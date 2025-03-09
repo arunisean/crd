@@ -24,7 +24,7 @@ def main():
     # Define directories and files
     articles_dir = 'articles_text'
     high_rated_dir = 'high_rated_articles'
-    ratings_json = 'article_ratings.json'
+    ratings_json = os.path.join('.', 'article_ratings.json')
     
     # Create output directory
     os.makedirs(high_rated_dir, exist_ok=True)
@@ -32,7 +32,7 @@ def main():
     # Create analyzer
     analyzer = ArticleAnalyzer(
         api_client=api_client,
-        rating_criteria=config.rating_criteria,
+        config=config,
         top_articles=config.top_articles,
         max_workers=config.threads,
         model=config.rating_model
@@ -43,6 +43,7 @@ def main():
     analyzer.process(articles_dir, high_rated_dir, ratings_json)
     
     logger.info("Completed rating articles")
+    logger.info(f"Article ratings saved to {ratings_json}")
     return 0
 
 if __name__ == "__main__":

@@ -16,8 +16,6 @@ def parse_args():
     
     parser.add_argument('--config', '-c', default='.env',
                         help='Path to configuration file')
-    parser.add_argument('--opml', '-o', default='research.opml',
-                        help='Path to OPML file containing RSS feeds')
     parser.add_argument('--output-dir', '-d', default='output',
                         help='Directory to store output files')
     parser.add_argument('--skip-cleanup', action='store_true',
@@ -68,7 +66,7 @@ def main():
             max_workers=config.threads,
             keywords=config.keywords
         )
-        urls = fetcher.extract_urls_from_opml(args.opml)
+        urls = fetcher.extract_urls_from_opml(config.opml_file)
         articles = fetcher.fetch_all_articles(urls)
         
         # Save articles to CSV
@@ -81,7 +79,7 @@ def main():
         logger.info("Step 2: Rating articles")
         analyzer = ArticleAnalyzer(
             api_client=api_client,
-            rating_criteria=config.rating_criteria,
+            config=config,
             top_articles=config.top_articles,
             max_workers=config.threads,
             model=config.rating_model  # Use model from config
