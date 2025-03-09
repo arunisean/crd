@@ -19,7 +19,7 @@ class Config:
         # Content settings
         rating_criteria_path = os.getenv("RATING_CRITERIA", "")
         if os.path.isfile(rating_criteria_path):
-            with open(rating_criteria_path, 'r') as f:
+            with open(rating_criteria_path, 'r', encoding='utf-8') as f:
                 self.rating_criteria = f.read().strip()
         else:
             self.rating_criteria = rating_criteria_path
