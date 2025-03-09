@@ -8,15 +8,11 @@ def run_script(script_name):
     
     process = subprocess.Popen(['python', script_name], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True, encoding='utf-8', errors='replace')
     
-    while True:
-        output = process.stdout.readline()
-        if output == '' and process.poll() is not None:
-            break
-        if output:
-            print(output.strip())
+    stdout, stderr = process.communicate()
+    returncode = process.returncode
     
-    stderr = process.stderr.read()
-    returncode = process.poll()
+    if stdout:
+        print(stdout.strip())
     
     if returncode == 0:
         print(f"{script_name} executed successfully.")

@@ -99,9 +99,15 @@ def write_titles_and_links(summaries, output_file):
             f.write(f"{data['chinese_title']}\\n{data['url']}\\n\\n")
 
 def main():
+    logger.info("Starting make_newsletter.py")
     # Load article summaries
-    with open('output/article_summaries.json', 'r', encoding='utf-8') as f:
-        summaries = json.load(f)
+    try:
+        with open('output/article_summaries.json', 'r', encoding='utf-8') as f:
+            summaries = json.load(f)
+        logger.info("Successfully loaded article summaries from output/article_summaries.json")
+    except Exception as e:
+        logger.error(f"Failed to load article summaries: {e}")
+        return
 
     # Create thumbnails directory
     thumbnails_dir = 'thumbnails'
@@ -122,6 +128,7 @@ def main():
                 logger.warning(f"Failed to download thumbnail from {thumbnail_url}")
                 data['thumbnail'] = None
         else:
+            logger.info(f"No thumbnail found for {url}")
             data['thumbnail'] = None
 
         # Add source to data
@@ -135,8 +142,14 @@ def main():
     env = Environment(loader=FileSystemLoader('.'))
     template = env.get_template('newsletter_template.html')
 
-    newsletter_html = template.render(articles=summaries.values(), title=title, font=font)
-# Save the newsletter
+    try:
+        newsletter_html = template.render(articles=summaries.values(), title=title, font=font)
+        logger.info("Successfully rendered newsletter template")
+    except Exception as e:
+        logger.error(f"Failed to render newsletter template: {e}")
+        return
+
+    # Save the newsletter
     logger.info("Saving newsletter to newsletter.html")
     with open('newsletter.html', 'w', encoding='utf-8') as f:
         f.write(newsletter_html)
@@ -146,6 +159,7 @@ def main():
     write_titles_and_links(summaries, 'titles_and_links.txt')
 
     print("Newsletter created: newsletter.html")
+    logger.info(f"NEWSLETTER_TITLE: {title}, NEWSLETTER_FONT: {font}")
     print("Titles and links saved: titles_and_links.txt")
 
 if __name__ == "__main__":

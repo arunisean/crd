@@ -178,6 +178,16 @@ class NewsletterRenderer:
     
     def render_newsletter(self, summaries, template_path, output_file):
         """Render newsletter HTML using Jinja2 template"""
+        try:
+            env = Environment(loader=FileSystemLoader(os.path.dirname(template_path)))
+            template = env.get_template(os.path.basename(template_path))
+            newsletter_html = template.render(articles=summaries.values(), title=self.title, font=self.font)
+            write_file(output_file, newsletter_html)
+            logger.info(f"Newsletter rendered successfully to {output_file}")
+            return True
+        except Exception as e:
+            logger.error(f"Error rendering newsletter: {e}")
+            return False
 
     def generate_top_news_image(self, summaries_data, output_path, template_path):
         """Generate a single PNG image with the top news content."""
@@ -204,6 +214,7 @@ class NewsletterRenderer:
             <h1>Top News</h1>
         """
         for data in summaries_data.values():
+            logger.info(f"URL: {data['url']}")
             html_content += f"""
             <div>
                 <h2>{data['chinese_title']}</h2>

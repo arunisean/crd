@@ -2,9 +2,6 @@
 # Archive folder
 archives/
 .env
-research.opml
-*.opml
-*.criteria
 *.md
 crd/__pycache__/*
 Output/*

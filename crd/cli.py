@@ -34,6 +34,9 @@ def main():
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logger = setup_logger('crd', level=log_level)
     
+    logger.info(f"Current working directory: {os.getcwd()}")
+    logger.info(f"Output directory: {args.output_dir}")
+
     # Load configuration
     config = Config(args.config)
     
