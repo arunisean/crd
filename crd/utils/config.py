@@ -11,10 +11,16 @@ class Config:
         self.api_url = os.getenv("CUSTOM_API_URL", "https://api.openai.com/v1/chat/completions")
         self.api_key = os.getenv("API_KEY", "")
         
+        # Model settings
+        self.rating_model = os.getenv("RATING_MODEL", "gpt-3.5-turbo")
+        self.summary_model = os.getenv("SUMMARY_MODEL", "gpt-4o")
+        self.translation_model = os.getenv("TRANSLATION_MODEL", "gpt-4o")
+        
         # Content settings
         self.rating_criteria = os.getenv("RATING_CRITERIA", "")
         self.top_articles = int(os.getenv("TOP_ARTICLES", 5))
         self.keywords = os.getenv("KEYWORDS", "").split(',')
+        self.opml_file = os.getenv("OPML_FILE", "feeds.opml")
         
         # Newsletter settings
         self.newsletter_title = os.getenv("NEWSLETTER_TITLE", "Article Summary Newsletter")

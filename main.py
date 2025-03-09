@@ -37,5 +37,8 @@ def main():
         print(f"Running script {i}/{len(scripts)}: {script}")
         run_script(script)
 
+import sys
+from crd.cli import main as crd_main
+
 if __name__ == "__main__":
-    main()
+    sys.exit(crd_main())

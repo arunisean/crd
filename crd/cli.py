@@ -83,7 +83,8 @@ def main():
             api_client=api_client,
             rating_criteria=config.rating_criteria,
             top_articles=config.top_articles,
-            max_workers=config.threads
+            max_workers=config.threads,
+            model=config.rating_model  # Use model from config
         )
         top_articles = analyzer.process(articles_dir, high_rated_dir, ratings_json)
         
@@ -91,7 +92,7 @@ def main():
         logger.info("Step 3: Summarizing high-rated articles")
         summarizer = ArticleSummarizer(
             api_client=api_client,
-            model="gpt-4o",
+            model=config.summary_model,  # Use model from config
             max_workers=config.threads
         )
         summaries = summarizer.process(high_rated_dir, summaries_dir, summaries_json)

@@ -16,12 +16,12 @@ class ArticleAnalyzer:
         self.rating_criteria = rating_criteria
         self.top_articles = top_articles
         self.max_workers = max_workers
-        self.model = model  # Add model parameter
+        self.model = model  # Store model parameter
     
     def get_article_rating(self, content):
         """Get rating for an article using the API"""
         payload = {
-            "model": self.model,  # Use the model from the instance
+            "model": self.model,  # Use the model from instance
             "messages": [
                 {"role": "system", "content": f"You are an AI assistant that rates articles strictly based on the criteria: '{self.rating_criteria}'. First, determine if the article strictly matches the criteria. If it does not, respond with 'Not relevant'. If it matches, rate the article based on its value in 'X out of 10' format, where X is a number from 1 to 10."},
                 {"role": "user", "content": f"Rate the following article:\n\n{content}"}

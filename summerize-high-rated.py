@@ -6,12 +6,8 @@ from datetime import datetime
 import re
 import pangu  # Import pangu
 
-# Load environment variables
-load_dotenv()
+from crd.utils.config import Config
 
-# Set up custom API endpoint and key
-CUSTOM_API_URL = os.getenv("CUSTOM_API_URL")
-API_KEY = os.getenv("API_KEY")
 
 def read_article(file_path):
     with open(file_path, 'r', encoding='utf-8') as file:
@@ -37,15 +33,18 @@ def extract_url_and_title(content):
     
     return url, title
 
+# Use the Config class instead of individual environment variables
+config = Config()
+
 def get_chinese_title_and_summary(title, content, url):
     headers = {
         "Content-Type": "application/json",
-        "Authorization": f"Bearer {API_KEY}"
+        "Authorization": f"Bearer {config.api_key}"
     }
     
     # Translate title
     title_payload = {
-        "model": "gpt-4o",  # Updated model
+        "model": config.translation_model,  # Use translation model from config
         "messages": [
             {"role": "system", "content": "You are a translator. Translate the given title to Chinese (zh-CN). Output only the translated title without any additional text."},
             {"role": "user", "content": f"Translate this title to Chinese:\n\n{title}"}
@@ -54,7 +53,7 @@ def get_chinese_title_and_summary(title, content, url):
     
     # Summarize and translate content
     content_payload = {
-        "model": "gpt-4o",  # Updated model
+        "model": config.summary_model,  # Use summary model from config
         "messages": [
             {"role": "system", "content": "You are an AI assistant that summarizes articles in Chinese (zh-CN). Provide a concise summary in about 3-5 sentences in Chinese."},
             {"role": "user", "content": f"Summarize the following article in Chinese (zh-CN):\n\nTitle: {title}\n\nContent:\n{content}"}

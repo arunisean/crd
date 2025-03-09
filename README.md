@@ -13,20 +13,9 @@ This project is an automated system for processing and generating newsletters. I
 - cleanup.py: Cleans up generated files and directories and creates an archive.
 
 ## Environment Setup
-
-Dependency Installation
-
-Make sure the following dependencies are installed. You can use the following command to install them:
-
-```bash
-pip install -r requirements.txt
-playwright install
-```
-
 ### Environment Variables
 
 Create a `.env` file in the project root directory and add the following content:
-
 ```
 CUSTOM_API_URL=https://api.openai.com/v1/chat/completions  # URL of the custom OpenAI compatible API for article rating and summarization
 API_KEY=your_api_key  # API key to access the custom API
@@ -38,8 +27,10 @@ WIDTH=800  # Width for rendering the HTML newsletter
 KEYWORDS=keyword1,keyword2  # Keywords used for filtering articles (comma-separated)
 THREADS=10  # Number of threads used for concurrent processing of RSS feeds
 DATE_RANGE_DAYS=7  # Date range (in days) for retrieving articles from RSS feeds
+RATING_MODEL=gpt-3.5-turbo  # Model used for rating articles
+SUMMARY_MODEL=gpt-4o  # Model used for summarizing articles
+TRANSLATION_MODEL=gpt-4o  # Model used for translating content
 ```
-
 ## Usage
 
 ### Preparation

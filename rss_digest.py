@@ -13,15 +13,6 @@ from dotenv import load_dotenv
 import opencc
 
 
-load_dotenv()
-KEYWORDS = os.getenv("KEYWORDS").split(',')
-strTHREADS = os.getenv("THREADS")
-try:
-    THREADS = int(strTHREADS)
-except (ValueError, TypeError) as e:
-    print(f"Error converting {strTHREADS} to int: {e}")
-    THREADS = 1 
-DATE_RANGE_DAYS = int(os.getenv("DATE_RANGE_DAYS", 7))
 
 headers = {
     'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.3',
@@ -172,20 +163,50 @@ def process_articles(csv_file, output_folder, keywords):
     with ThreadPoolExecutor(max_workers=THREADS) as executor:
         executor.map(lambda row: process_single_article(row, output_folder, keywords), articles)
 
+import sys
+import os
+from crd.utils.config import Config
+from crd.fetcher import ArticleFetcher
+from crd.utils.logging import setup_logger
+
+def main():
+    # Setup logging
+    logger = setup_logger('crd_fetcher')
+    
+    # Load configuration
+    config = Config()
+    
+    # Create fetcher with configuration
+    fetcher = ArticleFetcher(
+        date_range_days=config.date_range_days,
+        max_workers=config.threads,
+        keywords=config.keywords
+    )
+    
+    # Define output directory
+    articles_dir = 'articles_text'
+    articles_csv = 'articles.csv'
+    
+    # Create output directory
+    os.makedirs(articles_dir, exist_ok=True)
+    
+    # Extract URLs from OPML
+    logger.info(f"Extracting URLs from {config.opml_file}")
+    urls = fetcher.extract_urls_from_opml(config.opml_file)
+    
+    # Fetch articles
+    logger.info(f"Fetching articles from {len(urls)} RSS feeds")
+    articles = fetcher.fetch_all_articles(urls)
+    
+    # Save articles to CSV
+    fetcher.save_articles_to_csv(articles, articles_csv)
+    
+    # Process articles
+    fetcher.process_articles(articles, articles_dir)
+    
+    logger.info(f"Completed fetching and processing articles")
+    return 0
+
 if __name__ == "__main__":
-    opml_file = 'CryptoNews.opml'
-    urls = extract_urls_from_opml(opml_file)
-    articles = fetch_all_articles(urls)
-    
-
-    with open('articles.csv', mode='w', newline='', encoding='utf-8') as file:
-        writer = csv.writer(file)
-        writer.writerow(['Title', 'URL', 'Date'])
-        for article in articles:
-            writer.writerow([article['title'], article['link'], article['date']])
-    
-    print("Articles have been written to articles.csv")
-    
-
-    process_articles('articles.csv', 'articles_text', KEYWORDS)
+    sys.exit(main())
 

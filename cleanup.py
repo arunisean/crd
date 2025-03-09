@@ -38,9 +38,16 @@ def copy_to_output_folder(output_folder, items_to_copy):
         elif os.path.isfile(item):
             shutil.copy2(item, output_folder)
 
+import sys
+from crd.cleanup import Cleanup
+from crd.utils.logging import setup_logger
+
 def main():
-    # List of items to zip and remove
-    items = [
+    # Setup logging
+    logger = setup_logger('crd_cleanup')
+    
+    # Define items to archive and copy
+    items_to_archive = [
         "article_summaries",
         "articles_text",
         "high_rated_articles",
@@ -50,34 +57,25 @@ def main():
         "articles.csv",
         "newsletter.html",
         "titles_and_links.txt",
-        "newsletter.png"  # Added newsletter.png to the list
+        "newsletter.png"
     ]
-
-    # Create archives directory
-    archives_dir = "archives"
-    os.makedirs(archives_dir, exist_ok=True)
-
-    # Create zip filename with current date and time
-    current_time = datetime.now().strftime("%Y%m%d_%H%M%S")
-    zip_filename = os.path.join(archives_dir, f"archive_{current_time}.zip")
-
-    # Create output folder with current date and time
-    output_folder = os.path.join("output", current_time)
-    items_to_copy = ["newsletter.html", "thumbnails", "titles_and_links.txt", "newsletter.png"]
-    copy_to_output_folder(output_folder, items_to_copy)
-
-    # Zip files and folders
-    print(f"Creating zip file: {zip_filename}")
-    zip_files_and_folders(zip_filename, items)
-
-    # Remove original files and folders
-    print("Removing original files and folders")
-    remove_items(items)
-
-    # Update .gitignore
-    update_gitignore()
-
-    print(f"Cleanup complete. Archive created: {zip_filename}")
+    
+    items_to_copy = [
+        "newsletter.html",
+        "thumbnails",
+        "titles_and_links.txt",
+        "newsletter.png"
+    ]
+    
+    # Create cleanup handler
+    cleanup = Cleanup()
+    
+    # Process cleanup
+    logger.info("Cleaning up and archiving files")
+    cleanup.process(items_to_archive, items_to_copy)
+    
+    logger.info("Cleanup complete")
+    return 0
 
 if __name__ == "__main__":
-    main()
+    sys.exit(main())

@@ -5,6 +5,20 @@ import zipfile
 from datetime import datetime
 import logging
 
+"""
+IO Utility Module
+================
+
+This module provides utility functions for file operations including:
+- Reading and writing text files
+- Reading and writing JSON files
+- Zipping files and folders
+- Removing files and folders
+- Updating .gitignore file
+
+These functions include error handling and logging for robustness.
+"""
+
 logger = logging.getLogger(__name__)
 
 def read_file(file_path, encoding='utf-8'):

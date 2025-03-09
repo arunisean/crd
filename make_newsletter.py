@@ -6,6 +6,9 @@ from jinja2 import Environment, FileSystemLoader
 from urllib.parse import urlparse, parse_qs
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from crd.utils.config import Config
+from crd.renderer import NewsletterRenderer
+from crd.utils.logging import setup_logger
 
 # Load environment variables
 load_dotenv()
