@@ -2,6 +2,7 @@ import argparse
 import sys
 import logging
 import os
+import json  # Import json
 from .utils.config import Config
 from .utils.logging import setup_logger
 from .fetcher import ArticleFetcher
@@ -88,23 +89,36 @@ def main():
             model=config.rating_model  # Use model from config
         )
         top_articles = analyzer.process(articles_dir, high_rated_dir, ratings_json)
-        
+
         # 3. Summarize high-rated articles
         logger.info("Step 3: Summarizing high-rated articles")
-        summarizer = ArticleSummarizer(
-            api_client=api_client,
-            model=config.summary_model,  # Use model from config
-            max_workers=config.threads
-        )
-        summaries = summarizer.process(high_rated_dir, summaries_dir, summaries_json)
-        
+        # Execute the summerize-high-rated.py script
+        import subprocess
+        try:
+            subprocess.run(['python', 'summerize-high-rated.py'], check=True, cwd=os.getcwd())
+            logger.info("Summarization completed using summerize-high-rated.py")
+        except subprocess.CalledProcessError as e:
+            logger.error(f"Error running summerize-high-rated.py: {e}")
+
+        # Load the summaries from the JSON file
+        try:
+            with open(summaries_json, 'r', encoding='utf-8') as f:
+                summaries = json.load(f)
+            logger.info(f"Loaded summaries from {summaries_json}")
+        except FileNotFoundError:
+            logger.error(f"Summaries file not found: {summaries_json}")
+            summaries = {}
+        except json.JSONDecodeError:
+            logger.error(f"Error decoding JSON from {summaries_json}")
+            summaries = {}
+
         # 4. Generate newsletter
         logger.info("Step 4: Generating newsletter")
         renderer = NewsletterRenderer(
             title=config.newsletter_title,
             font=config.newsletter_font
         )
-        
+
         # Use the template path from args
         renderer.process(
             summaries_data=summaries,
@@ -113,7 +127,7 @@ def main():
             output_txt=titles_links_txt,
             thumbnails_dir=thumbnails_dir
         )
-        
+
         # 5. Cleanup
         if not args.skip_cleanup:
             logger.info("Step 5: Cleaning up and archiving files")
@@ -128,22 +142,22 @@ def main():
                 newsletter_html,
                 titles_links_txt
             ]
-            
+
             items_to_copy = [
                 newsletter_html,
                 thumbnails_dir,
                 titles_links_txt
             ]
-            
+
             cleanup = Cleanup()
             cleanup.process(items_to_archive, items_to_copy)
-        
+
         logger.info("Content Research Digest pipeline completed successfully")
-        
+
     except Exception as e:
         logger.error(f"Error in pipeline: {e}", exc_info=True)
         return 1
-    
+
     return 0
 
 if __name__ == "__main__":

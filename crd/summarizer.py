@@ -49,7 +49,7 @@ class ArticleSummarizer:
             "model": self.model,
             "messages": [
                 {"role": "system", "content": "You are an AI assistant that summarizes articles in Chinese (zh-CN). Provide a concise summary in about 3-5 sentences in Chinese."},
-                {"role": "user", "content": f"Summarize the following article in Chinese (zh-CN):\n\nTitle: {title}\n\nContent:\n{content}"}
+                {"role": "user", "content": f"Summarize the following article in Chinese (zh-CN),Do not output anything that is irrelevant to the article.:\n\nTitle: {title}\n\nContent:\n{content}"}
             ]
         }
         
@@ -70,7 +70,25 @@ class ArticleSummarizer:
         except Exception as e:
             logger.error(f"Error getting Chinese title and summary: {e}")
             return None, None
-    
+
+    def get_english_summary(self, title, content):
+        """Get English summary for an article"""
+        content_payload = {
+            "model": self.model,
+            "messages": [
+                {"role": "system", "content": "You are an AI assistant that summarizes articles. Provide a concise summary in about 3-5 sentences."},
+                {"role": "user", "content": f"Summarize the following article:\n\nTitle: {title}\n\nContent:\n{content}"}
+            ]
+        }
+
+        try:
+            content_response = self.api_client.request(content_payload)
+            english_summary = content_response['choices'][0]['message']['content'].strip()
+            return english_summary
+        except Exception as e:
+            logger.error(f"Error getting English summary: {e}")
+            return None
+
     def summarize_article(self, file_path, output_dir):
         """Summarize a single article"""
         filename = os.path.basename(file_path)
@@ -87,27 +105,32 @@ class ArticleSummarizer:
                            if not line.startswith(('URL:', 'Title:')))
         
         chinese_title, chinese_summary = self.get_chinese_title_and_summary(title, content, url)
-        
         if chinese_summary and chinese_title:
-            summary_filename = f"summary_{filename}"
-            summary_path = os.path.join(output_dir, summary_filename)
-            
-            summary_content = f"标题：{chinese_title}\n\nURL: {url}\n\n{chinese_summary}"
-            
-            if write_file(summary_path, summary_content):
-                logger.info(f"Chinese title and summary for {filename} saved")
-                
-                return filename, {
-                    "url": url,
-                    "original_title": title,
-                    "chinese_title": chinese_title,
-                    "chinese_summary": chinese_summary,
-                    "source": urlparse(url).netloc
-                }
-        
-        logger.warning(f"Failed to get Chinese title and summary for {filename}")
+            # Get English summary
+            english_summary = self.get_english_summary(title, content)
+
+            if english_summary:
+                summary_filename = f"summary_{filename}"
+                summary_path = os.path.join(output_dir, summary_filename)
+
+                summary_content = f"Title: {title}\n标题：{chinese_title}\n\nURL: {url}\n\nSummary: {english_summary}\n\n摘要：{chinese_summary}"
+
+                if write_file(summary_path, summary_content):
+                    logger.info(f"Chinese and English titles and summaries for {filename} saved")
+
+                    return filename, {
+                        "url": url,
+                        "original_title": title,
+                        "chinese_title": chinese_title,
+                        "chinese_summary": chinese_summary,
+                        "english_summary": english_summary,
+                        "source": urlparse(url).netloc
+                    }
+            else:
+                logger.warning(f"Failed to get English summary for {filename}")
+        else:
+            logger.warning(f"Failed to get Chinese title and summary for {filename}")
         return filename, None
-    
     def summarize_articles(self, articles_dir, summaries_dir):
         """Summarize multiple articles concurrently"""
         os.makedirs(summaries_dir, exist_ok=True)
