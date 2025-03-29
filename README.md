@@ -1,18 +1,32 @@
+# Content Research Digest (CRD)
+
+## Overview
+Automated newsletter generation system that:
+1. Fetches articles from RSS feeds
+2. Rates articles based on criteria 
+3. Summarizes top articles
+4. Generates newsletter with thumbnails
+
+## Installation
+```bash
+pip install -e .
+```
+
 ## Project Introduction
 
 This project is an automated system for processing and generating newsletters. It retrieves articles from RSS feeds, performs rating and generates summaries, and ultimately creates an HTML newsletter with article summaries.
 
 ## File Structure
+- crd/ - Core package containing all business logic
+  - analyzer.py - Article rating logic
+  - summarizer.py - Article summarization
+  - renderer.py - Newsletter generation
+  - cli.py - Command line interface
+- main.py - Main entry point
+- newsletter_template.html - HTML template
+- feeds.opml - RSS feed subscriptions
 
-- main.py: Main script that runs other scripts sequentially.
-- rss_digest.py: Retrieves articles from RSS feeds and saves them as CSV files.
-- rating-openai.py: Rates the articles using a custom API and copies high-rated articles to a specified directory.
-- summerize-high-rated.py: Generates summaries for high-rated articles and saves them.
-- make_newsletter.py: Generates an HTML newsletter with article summaries.
-- renderpng.py: Renders the HTML newsletter as a PNG image.
-- cleanup.py: Cleans up generated files and directories and creates an archive.
-
-## Environment Setup
+## Configuration
 ### Environment Variables
 
 Create a `.env` file in the project root directory and add the following content:
@@ -31,6 +45,7 @@ RATING_MODEL=gpt-3.5-turbo  # Model used for rating articles
 SUMMARY_MODEL=gpt-4o  # Model used for summarizing articles
 TRANSLATION_MODEL=gpt-4o  # Model used for translating content
 ```
+
 ## Usage
 
 ### Preparation
@@ -42,17 +57,13 @@ Save your subscription OPML file in the current directory and rename it to `feed
 Run the following command in the project root directory:
 
 ```bash
-python3 main.py
+python main.py
 ```
 
 This command will run all the sub-scripts sequentially, performing the entire process from article retrieval to rating, summarization, and newsletter generation.
 
-### Notes
-
-- Make sure to configure the environment variables correctly before running the scripts.
-- Internet connectivity may be required during the execution to access RSS feeds and the custom API.
-- The default script uses OpenAI's GPT-3.5-Turbo model for rating. If you want to use a different model, modify the `model` variable in `rating-openai.py`.
-- The default script uses OpenAI's GPT-4o model for summarization. If you want to use a different model, modify the `model` variable in `summerize-high-rated.py`.
+### Advanced options
+crd --output-dir my_output --template custom_template.html --skip-cleanup
 
 ### Contributing
 
