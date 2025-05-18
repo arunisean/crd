@@ -1,7 +1,9 @@
-# Content Research Digest (CRD)
+# Curated Research Digest (CRD)
 
 ## Overview
-Automated newsletter generation system that:
+CRD (Curated Research Digest) intelligently summarizing and curating the most important research and engineering developments in the Crypto, AI, and OS spaces.
+
+## Workflow
 1. Fetches articles from RSS feeds
 2. Rates articles based on criteria 
 3. Summarizes top articles
