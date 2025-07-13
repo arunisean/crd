@@ -11,7 +11,8 @@
       "https://news.ycombinator.com/rss",
       "https://www.producthunt.com/feed",
       "https://techcrunch.com/feed/"
-    ]
+    ],
+    "use_playwright": true
   },
   "Academic": {
     "rating_criteria": "Is this a pre-print or published paper from a reputable source like ArXiv, discussing a novel method, experiment, or finding in computer science or a related field?",

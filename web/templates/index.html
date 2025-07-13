@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Content Research Digest</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;700&family=Roboto:wght@400;700&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="container">
+        <header class="main-header">
+            <h1>Content Research Digest</h1>
+            <p>Daily insights from across the web.</p>
+            <nav>
+                {% for date in dates %}
+                    <a href="/{{ date }}" class="{{ 'active' if date == selected_date }}">{{ date }}</a>
+                {% endfor %}
+            </nav>
+        </header>
+
+        {% if top_news_image %}
+        <div class="top-news-container">
+            <h2>Today's Top News Summary</h2>
+            <img src="{{ url_for('static', filename=top_news_image) }}" alt="Top News Summary" class="top-news-image">
+        </div>
+        {% endif %}
+
+        <main class="content-grid">
+            {% for category, articles in summaries.items() %}
+                <section class="category-section">
+                    <h2 class="category-title">{{ category }}</h2>
+                    <div class="articles-container">
+                        {% for article in articles %}
+                            <div class="article-card">
+                                {% if article.thumbnail %}
+                                    <div class="card-thumbnail">
+                                        <img src="{{ url_for('static', filename=article.thumbnail) }}" alt="Thumbnail for {{ article.original_title }}">
+                                    </div>
+                                {% endif %}
+                                <div class="card-body">
+                                    <h3 class="card-title-zh">{{ article.chinese_title }}</h3>
+                                    <p class="card-title-en">{{ article.original_title }}</p>
+                                    <p class="card-summary">{{ article.chinese_summary }}</p>
+                                    <div class="card-footer">
+                                        <span class="source">{{ article.source }}</span>
+                                        <div class="actions">
+                                            <a href="{{ article.url }}" target="_blank" class="action-link">Read Original</a>
+                                            <a href="https://twitter.com/intent/tweet?text={{ (article.chinese_title + ' - ' + article.english_summary)|urlencode }}&url={{ article.url|urlencode }}" target="_blank" class="action-link share-x">
+                                                <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>
+                                                <span>Share</span>
+                                            </a>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        {% endfor %}
+                    </div>
+                </section>
+            {% else %}
+                <p class="no-data">No articles found for {{ selected_date }}.</p>
+            {% endfor %}
+        </main>
+
+        <footer>
+            <p>&copy; {{ now.year }} Content Research Digest. All rights reserved.</p>
+        </footer>
+    </div>
+</body>
+</html>

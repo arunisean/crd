@@ -39,5 +39,51 @@ class TestArticleFetcher(unittest.TestCase):
             self.assertEqual(articles[0]['title'], 'Article 2')
             self.assertEqual(articles[1]['title'], 'Article 3')
 
+    def test_fetch_articles_from_atom_feed_with_updated_date(self):
+        # Mock feedparser and requests
+        mock_http_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = b''
+        mock_http_client.get.return_value = mock_response
+
+        # Mock feed with 'updated_parsed' for Atom feeds (like arXiv)
+        mock_feed = {
+            'entries': [
+                {'title': 'Article 1', 'link': 'http://a1.com', 'updated_parsed': datetime(2023, 1, 1, 12, 0, 0).timetuple()},
+                {'title': 'Article 2', 'link': 'http://a2.com', 'updated_parsed': datetime(2023, 1, 2, 12, 0, 0).timetuple()}
+            ]
+        }
+
+        target_date = date(2023, 1, 2)
+        fetcher = ArticleFetcher(http_client=mock_http_client, target_date=target_date)
+
+        with patch('feedparser.parse', return_value=mock_feed):
+            articles = fetcher.fetch_articles_from_rss('http://dummy.url/atom')
+
+            self.assertEqual(len(articles), 1)
+            self.assertEqual(articles[0]['title'], 'Article 2')
+
+    def test_fetch_articles_skips_entries_without_date(self):
+        mock_http_client = MagicMock()
+        mock_response = MagicMock()
+        mock_response.content = b''
+        mock_http_client.get.return_value = mock_response
+
+        mock_feed = {
+            'entries': [
+                {'title': 'Article 1', 'link': 'http://a1.com'},  # No date
+                {'title': 'Article 2', 'link': 'http://a2.com', 'published_parsed': datetime(2023, 1, 2, 12, 0, 0).timetuple()}
+            ]
+        }
+
+        target_date = date(2023, 1, 2)
+        fetcher = ArticleFetcher(http_client=mock_http_client, target_date=target_date)
+
+        with patch('feedparser.parse', return_value=mock_feed):
+            articles = fetcher.fetch_articles_from_rss('http://dummy.url/rss')
+
+            self.assertEqual(len(articles), 1)
+            self.assertEqual(articles[0]['title'], 'Article 2')
+
 if __name__ == '__main__':
     unittest.main()

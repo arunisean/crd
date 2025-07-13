@@ -213,5 +213,81 @@ class TestCli(unittest.TestCase):
         # Check that final JSONs were written for the successful runs
         self.assertEqual(mock_write_json.call_count, 6) # 2 files * 3 days
 
+    @patch('crd.cli.setup_logger')
+    @patch('crd.cli.Config')
+    @patch('crd.cli.APIClient')
+    @patch('crd.cli.ArticleFetcher')
+    @patch('crd.cli.ArticleAnalyzer')
+    @patch('crd.cli.ArticleSummarizer')
+    @patch('crd.cli.NewsletterRenderer')
+    @patch('crd.cli.os.makedirs')
+    @patch('crd.cli.write_json')
+    @patch('crd.cli.os.path.exists', return_value=True) # Assume data EXISTS
+    @patch('sys.argv', ['crd', '--output-dir', 'test_output']) # NO --force
+    def test_main_pipeline_skips_when_data_exists_and_no_force(
+        self, mock_exists, mock_write_json, mock_makedirs, mock_renderer, mock_summarizer,
+        mock_analyzer, mock_fetcher, mock_api_client, 
+        mock_config, mock_setup_logger
+    ):
+        self._setup_common_mocks(mock_config)
+        mock_config.return_value.feeds_config = {
+            "Test Category": {
+                "rating_criteria": "test criteria",
+                "feeds": ["http://test.com/rss"]
+            }
+        }
+
+        # Run the main function
+        result = crd_main()
+
+        # Assertions
+        self.assertEqual(result, 0)
+        # The pipeline should be skipped for all 3 days
+        mock_fetcher.assert_not_called()
+        mock_analyzer.assert_not_called()
+        mock_summarizer.assert_not_called()
+        # Check that the renderer's methods are not called
+        mock_renderer.return_value.download_thumbnails.assert_not_called()
+        mock_renderer.return_value.process.assert_not_called()
+
+    @patch('crd.cli.setup_logger')
+    @patch('crd.cli.Config')
+    @patch('crd.cli.APIClient')
+    @patch('crd.cli.ArticleFetcher')
+    @patch('crd.cli.ArticleAnalyzer')
+    @patch('crd.cli.ArticleSummarizer')
+    @patch('crd.cli.NewsletterRenderer')
+    @patch('crd.cli.os.makedirs')
+    @patch('crd.cli.write_json')
+    @patch('crd.cli.os.path.exists', return_value=True) # Assume data EXISTS
+    @patch('sys.argv', ['crd', '--output-dir', 'test_output', '--force']) # Run with --force
+    def test_main_pipeline_runs_with_force_flag_when_data_exists(
+        self, mock_exists, mock_write_json, mock_makedirs, mock_renderer, mock_summarizer,
+        mock_analyzer, mock_fetcher, mock_api_client, 
+        mock_config, mock_setup_logger
+    ):
+        self._setup_common_mocks(mock_config)
+        mock_config.return_value.feeds_config = {
+            "Test Category": {
+                "rating_criteria": "test criteria",
+                "feeds": ["http://test.com/rss"]
+            }
+        }
+
+        # Mock return values
+        mock_fetcher.return_value.fetch_all_articles.return_value = [{'title': 't', 'link': 'l', 'date': 'd'}]
+        mock_analyzer.return_value.process.return_value = [{"filename": "top_article.txt", "score": 9.0, "title": "Top Article", "url": "http://top.com"}]
+        mock_summarizer.return_value.process.return_value = {"summary1": {"url": "http://example.com", "original_title": "ot", "chinese_title": "ct", "chinese_summary": "cs", "english_summary": "es", "source": "example.com"}}
+
+        # Run the main function
+        result = crd_main()
+
+        # Assertions
+        self.assertEqual(result, 0)
+        # Even though os.path.exists is True, the pipeline should run due to --force
+        self.assertEqual(mock_fetcher.call_count, 3)
+        self.assertEqual(mock_analyzer.call_count, 3)
+        self.assertEqual(mock_summarizer.call_count, 3)
+
 if __name__ == '__main__':
     unittest.main()

@@ -1,6 +1,7 @@
 import xml.etree.ElementTree as ET
 import feedparser
 import requests
+from playwright.sync_api import sync_playwright, Error as PlaywrightError
 from concurrent.futures import ThreadPoolExecutor
 from bs4 import BeautifulSoup
 from youtube_transcript_api import YouTubeTranscriptApi
@@ -9,16 +10,16 @@ from datetime import datetime, timedelta
 import os
 import logging
 import csv
-from .utils.io import write_file
 from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
 class ArticleFetcher:
     """Fetches articles from RSS feeds"""
-    
-    def __init__(self, http_client=None, target_date=None, max_workers=10, keywords=None):
+
+    def __init__(self, db_manager, http_client=None, target_date=None, max_workers=10, keywords=None):
         self.http_client = http_client or requests
+        self.db_manager = db_manager
         self.target_date = target_date or datetime.now().date()
         self.max_workers = max_workers
         self.keywords = keywords or []
@@ -33,7 +34,13 @@ class ArticleFetcher:
             
             for entry in feed.entries:
                 try:
-                    published_date = datetime(*entry.published_parsed[:6])
+                    # Atom feeds use 'updated_parsed', RSS uses 'published_parsed'.
+                    # feedparser should normalize, but we check both to be safe.
+                    date_tuple = entry.get('published_parsed') or entry.get('updated_parsed')
+                    if not date_tuple:
+                        continue
+
+                    published_date = datetime(*date_tuple[:6])
                     # Filter for the specific target date
                     if published_date.date() == self.target_date:
                         article = {
@@ -79,16 +86,65 @@ class ArticleFetcher:
             logger.error(f"Error fetching HTML content from {url}: {e}, URL: {url}")
             return None
     
+    def fetch_html_with_playwright(self, url):
+        """Fetch HTML content from a URL using Playwright for JS-heavy sites."""
+        try:
+            logger.info(f"Fetching HTML with Playwright from {url}")
+            with sync_playwright() as p:
+                browser = p.chromium.launch()
+                page = browser.new_page()
+                page.goto(url, wait_until='networkidle', timeout=20000)
+                content = page.content()
+                browser.close()
+                return content
+        except PlaywrightError as e:
+            logger.error(f"Error fetching HTML with Playwright from {url}: {e}")
+            return None
+
     def extract_article_content(self, html):
         """Extract article content from HTML"""
+        if not html:
+            return None
         try:
             soup = BeautifulSoup(html, 'html.parser')
             
-            article = soup.find('article')
-            if article:
-                return article.get_text()
-            else:
-                return None
+            # List of selectors to try in order of preference
+            selectors = [
+                'article',
+                'main',
+                '[role="main"]',
+                '.post-content',
+                '.entry-content',
+                '.td-post-content', # For sites like cointelegraph
+                '#content',
+                '.content',
+                '#main-content',
+                '.main-content',
+                '#article-body',
+                '.article-body'
+            ]
+            
+            content_element = None
+            for selector in selectors:
+                content_element = soup.select_one(selector)
+                if content_element:
+                    logger.debug(f"Found content with selector: '{selector}'")
+                    break
+            
+            # Fallback: if no specific container is found, use the body,
+            # but remove common noise.
+            if not content_element:
+                content_element = soup.body
+                if not content_element:
+                    return None # No body tag found
+                logger.debug("No specific content container found, falling back to body.")
+                # Remove common non-content tags
+                for tag_name in ['nav', 'header', 'footer', 'aside', 'script', 'style', '.sidebar', '#sidebar']:
+                    for tag in content_element.select(tag_name):
+                        tag.decompose()
+            
+            # Get text and clean it up
+            return content_element.get_text(separator='\n', strip=True)
         except Exception as e:
             logger.error(f"Error extracting article content: {e}")
             return None
@@ -110,53 +166,59 @@ class ArticleFetcher:
         except Exception as e:
             logger.error(f"Error fetching subtitles for video {video_id}: {e}")
             return None
-    
-    def save_article_content(self, title, content, url, date, folder):
-        """Save article content to a file if it contains keywords"""
-        if self.keywords and not any(keyword.lower() in content.lower() for keyword in self.keywords):
-            logger.info(f"Skipping article: {title} (none of the keywords found)")
-            return False
-        
-        filename = f"{title}.txt".replace('/', '_').replace('\\', '_')
-        filepath = os.path.join(folder, filename)
-        
-        article_content = f"Title: {title}\nURL: {url}\nDate: {date}\n\n"
-        article_content += '\n'.join([line for line in content.split('\n') if line.strip()])
-        
-        if write_file(filepath, article_content):
-            logger.info(f"Saved article: {filepath}")
-            return True
-        return False
-    
-    def process_single_article(self, article, output_folder):
+
+    def process_single_article(self, article_info, use_playwright=False):
         """Process a single article"""
-        title = article['title']
-        url = article['link']
-        date = article['date']
+        article, category = article_info
+        title = article.get('title')
+        url = article.get('link')
+        date = article.get('date')
+
+        if not all([title, url, date]):
+            logger.warning(f"Skipping article with missing data: {article}")
+            return False
+
         logger.info(f"Processing article: {title} from {url}")
-        
+
+        content = None
         video_id = self.get_youtube_video_id(url)
         if video_id:
             content = self.fetch_youtube_subtitles(video_id)
         else:
-            html = self.fetch_html_content(url)
+            if use_playwright:
+                html = self.fetch_html_with_playwright(url)
+            else:
+                html = self.fetch_html_content(url)
             content = self.extract_article_content(html) if html else None
-        
+
         if content:
-            return self.save_article_content(title, content, url, date, output_folder)
+            if self.keywords and not any(keyword.lower() in content.lower() for keyword in self.keywords):
+                logger.info(f"Skipping article: {title} (none of the keywords found)")
+                return False
+
+            article_data = {
+                'link': url,
+                'title': title,
+                'date': date,
+                'fetch_date': self.target_date.strftime('%Y-%m-%d'),
+                'category': category,
+                'content': content
+            }
+            if self.db_manager.add_article(article_data):
+                logger.info(f"Saved article to DB: {title}")
+                return True
         return False
-    def process_articles(self, articles, output_folder):
+
+    def process_articles(self, articles_with_category, use_playwright=False):
         """Process multiple articles concurrently"""
-        os.makedirs(output_folder, exist_ok=True)
-        
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
             results = list(executor.map(
-                lambda article: self.process_single_article(article, output_folder), 
-                articles
+                lambda article_info: self.process_single_article(article_info, use_playwright),
+                articles_with_category
             ))
-        
+
         processed_count = sum(1 for result in results if result)
-        logger.info(f"Processed {processed_count} articles out of {len(articles)}")
+        logger.info(f"Processed and saved {processed_count} articles to DB out of {len(articles_with_category)}")
         return processed_count  # Add this return statement
     def save_articles_to_csv(self, articles, csv_file):
         """Save articles to a CSV file"""

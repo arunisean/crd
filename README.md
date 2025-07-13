@@ -1,12 +1,13 @@
 # Content Research Digest (CRD)
 
-The Content Research Digest (CRD) is an automated pipeline that fetches articles from various RSS feeds, rates them based on custom criteria, summarizes the top-rated content using AI, and generates a web-based newsletter.
+The Content Research Digest (CRD) is an automated pipeline that fetches articles from various RSS feeds, rates them based on custom criteria, summarizes the top-rated content using AI, and generates a web-based digest.
 
 ## Features
 
 - **Multi-Source Categorization**: Fetch news from different categories (e.g., Crypto, AI, Academic), each with its own set of RSS feeds and rating criteria defined in `feeds.json`.
 - **AI-Powered Rating & Summarization**: Uses an OpenAI-compatible API to rate articles and generate both English and Chinese summaries.
-- **Web Interface**: A simple Flask-based web application to display the generated newsletter and top-rated articles.
+- **Database Backend**: Uses SQLite to store all fetched articles, ratings, and summaries, providing a persistent and queryable data store.
+- **Web Interface**: A simple Flask-based web application to display the generated digest.
 - **Automated Pipeline**: A command-line interface to run the entire process from fetching to rendering.
 - **Extensible Configuration**: Easily configure API keys, models, and sources through a `.env` file.
 
@@ -82,6 +83,11 @@ python -m crd.cli
 You can specify a different output directory:
 ```bash
 python -m crd.cli --output-dir /path/to/your/output
+```
+
+If you need to re-run the process for a day that already has output, use the `--force` flag:
+```bash
+python -m crd.cli --force
 ```
 
 ### Running the Web Server

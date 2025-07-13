@@ -2,7 +2,7 @@ import os
 import logging
 import re
 import requests
-from urllib.parse import urlparse, parse_qs
+from urllib.parse import urlparse, parse_qs, urljoin
 from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
 from playwright.sync_api import sync_playwright
@@ -13,8 +13,9 @@ logger = logging.getLogger(__name__)
 
 class NewsletterRenderer:
     """Renders newsletter from article summaries"""
-    
-    def __init__(self, title="Research Digest", font="Arial, sans-serif", width=800):
+
+    def __init__(self, db_manager, title="Research Digest", font="Arial, sans-serif", width=800):
+        self.db_manager = db_manager
         self.title = title
         self.font = font
         self.width = width
@@ -85,35 +86,52 @@ class NewsletterRenderer:
         return None
     
     def get_first_image(self, url):
-        """Get first image from a URL"""
+        """Get first meaningful image from a URL."""
         try:
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}
             response = requests.get(url, timeout=10, headers=headers)
             response.raise_for_status()
             soup = BeautifulSoup(response.content, 'html.parser')
-            images = soup.find_all('img')
-            for img in images:
-                if 'src' in img.attrs:
-                    src = img['src']
-                    # Filter out common ad-related keywords
-                    if not any(keyword in src.lower() for keyword in ['ad', 'banner', 'sponsor']):
-                        # Filter out small images
-                        if 'width' in img.attrs and 'height' in img.attrs:
-                            width = int(img['width'])
-                            height = int(img['height'])
-                            if width > 100 and height > 100:
-                                logger.info(f"First image found: {src}")
-                                return src
-                        else:
-                            logger.info(f"First image found: {src}")
-                            return src
-                    # Filter out images with extensions like .svg or .png
-                    elif not src.lower().endswith(('.svg', '.png')):
-                        logger.info(f"First image found: {src}")
-                        return src
+            
+            # Find all images and check them
+            for img in soup.find_all('img'):
+                if 'src' not in img.attrs:
+                    continue
+                
+                src = img['src']
+                
+                # 1. Basic validation and filtering
+                if not src or src.startswith('data:image'):
+                    continue
+                
+                # 2. Filter out common non-content images by keywords in src
+                non_content_keywords = ['ad', 'banner', 'sponsor', 'logo', 'avatar', 'icon', 'spinner', 'loading', 'pixel']
+                if any(keyword in src.lower() for keyword in non_content_keywords):
+                    continue
+
+                # 3. Filter out tiny images based on attributes
+                try:
+                    width = int(img.get('width', 0))
+                    height = int(img.get('height', 0))
+                    if (width > 0 and width < 100) or (height > 0 and height < 100):
+                        continue
+                except (ValueError, TypeError):
+                    pass # Ignore if width/height are not valid integers
+
+                # 4. Prioritize common image formats
+                if not src.lower().endswith(('.jpg', '.jpeg', '.png', '.webp')):
+                    continue
+
+                # 5. Construct absolute URL if src is relative
+                if not src.startswith(('http://', 'https://')):
+                    src = urljoin(url, src)
+
+                logger.info(f"First meaningful image found: {src}")
+                return src
+                
         except requests.RequestException as e:
             logger.error(f"Error getting first image from {url}: {e}")
-        logger.info("No first image found")
+        logger.info(f"No meaningful first image found for {url}")
         return None
     
     def get_thumbnail(self, url):
@@ -133,32 +151,50 @@ class NewsletterRenderer:
         
         logger.warning("No thumbnail found")
         return None
-    
-    def download_thumbnails(self, summaries_data, thumbnails_dir):
-        """Finds and downloads thumbnails for articles, updating the data dictionary."""
+
+    def process_thumbnails(self, category, date_str, thumbnails_dir):
+        """Finds, downloads, or screenshots thumbnails for articles."""
         os.makedirs(thumbnails_dir, exist_ok=True)
-        for category, articles in summaries_data.items():
-            for article in articles:
-                thumbnail_url = self.get_thumbnail(article['url'])
-                if thumbnail_url:
-                    # Sanitize title for filename
-                    safe_filename = self.sanitize_filename(article['original_title'])
-                    # Get extension
-                    ext = os.path.splitext(urlparse(thumbnail_url).path)[1]
-                    if not ext or len(ext) > 5: # basic check for valid extension
-                        ext = '.jpg'
-                    thumbnail_filename = f"{safe_filename}{ext}"
-                    thumbnail_path = os.path.join(thumbnails_dir, thumbnail_filename)
-                    
-                    if self.download_thumbnail(thumbnail_url, thumbnail_path):
-                        # Store relative path for web app
-                        article['thumbnail'] = os.path.join('thumbnails', thumbnail_filename)
-                    else:
-                        article['thumbnail'] = None
-                else:
-                    article['thumbnail'] = None
-        return summaries_data
-    
+        articles_to_process = self.db_manager.get_articles_by_status('summarized', category, date_str)
+
+        for article in articles_to_process:
+            thumbnail_rel_path = None
+            safe_filename = self.sanitize_filename(article['title'])
+
+            thumbnail_url = self.get_thumbnail(article['url'])
+            if thumbnail_url:
+                ext = os.path.splitext(urlparse(thumbnail_url).path)[1]
+                if not ext or len(ext) > 5:
+                    ext = '.jpg'
+                thumbnail_filename = f"{safe_filename}{ext}"
+                thumbnail_abs_path = os.path.join(thumbnails_dir, thumbnail_filename)
+                if self.download_thumbnail(thumbnail_url, thumbnail_abs_path):
+                    thumbnail_rel_path = os.path.join('thumbnails', thumbnail_filename)
+            else:
+                logger.info(f"No thumbnail found for {article['url']}. Attempting to take a screenshot.")
+                screenshot_filename = f"{safe_filename}.png"
+                screenshot_abs_path = os.path.join(thumbnails_dir, screenshot_filename)
+                if self.screenshot_article(article['url'], screenshot_abs_path):
+                    thumbnail_rel_path = os.path.join('thumbnails', screenshot_filename)
+
+            if thumbnail_rel_path:
+                self.db_manager.update_article_thumbnail(article['id'], thumbnail_rel_path)
+
+    def screenshot_article(self, url, output_path):
+        """Takes a screenshot of the top part of a webpage."""
+        try:
+            with sync_playwright() as p:
+                browser = p.chromium.launch()
+                page = browser.new_page(viewport={'width': 1200, 'height': 800})
+                page.goto(url, wait_until='networkidle', timeout=20000)
+                page.screenshot(path=output_path)
+                browser.close()
+            logger.info(f"Successfully took screenshot for {url} at {output_path}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to take screenshot for {url}: {e}")
+            return False
+
     def sanitize_filename(self, filename):
         """Sanitize filename to be safe for file systems"""
         # Remove or replace special characters
@@ -242,13 +278,15 @@ class NewsletterRenderer:
             logger.error("Failed to create temporary HTML file for top news image")
 
         return
-    
-    def process(self, summaries_data, thumbnails_dir):
+
+    def process(self, date_str, output_dir_for_date):
         """Process all steps to render newsletter assets like images."""
+        summaries_data = self.db_manager.get_summarized_articles_for_date(date_str)
         # Generate top news image only if there are summaries
         if summaries_data:
+            thumbnails_dir = os.path.join(output_dir_for_date, 'thumbnails')
             os.makedirs(thumbnails_dir, exist_ok=True)
-            top_news_image_path = os.path.join(thumbnails_dir, "top_news.png")
+            top_news_image_path = os.path.join(output_dir_for_date, "top_news.png")
             self.generate_top_news_image(summaries_data, top_news_image_path)
             return True
         return False
