@@ -7,14 +7,21 @@
     <link rel="stylesheet" href="style.css">
 </head>
 <body>
-    <h1>{{ title }}</h1>
-    {% for article in articles %}
-    <div class="article">
-        <h2>{{ article.original_title }}</h2>
-        <h3>{{ article.chinese_title }}</h3>
-        <p>{{ article.english_summary }}</p>
-        <p>{{ article.chinese_summary }}</p>
-        <p>Source: <a href="{{ article.url }}">{{ article.source }}</a></p>
+    <div class="header">
+        <h1>{{ title }}</h1>
+    </div>
+    {% for category, articles in articles_by_category.items() %}
+    <div class="category-section">
+        <h1>{{ category }}</h1>
+        {% for article in articles %}
+        <div class="article">
+            <h2><a href="{{ article.url }}">{{ article.original_title }}</a></h2>
+            <h3>{{ article.chinese_title }}</h3>
+            <p>{{ article.english_summary }}</p>
+            <p>{{ article.chinese_summary }}</p>
+            <p>Source: <a href="{{ article.url }}">{{ article.source }}</a></p>
+        </div>
+        {% endfor %}
     </div>
     {% endfor %}
 </body>

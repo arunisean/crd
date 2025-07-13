@@ -17,29 +17,11 @@ logger = logging.getLogger(__name__)
 class ArticleFetcher:
     """Fetches articles from RSS feeds"""
     
-    def __init__(self, http_client=None, date_range_days=7, max_workers=10, keywords=None):
+    def __init__(self, http_client=None, target_date=None, max_workers=10, keywords=None):
         self.http_client = http_client or requests
-        self.date_range_days = date_range_days
+        self.target_date = target_date or datetime.now().date()
         self.max_workers = max_workers
         self.keywords = keywords or []
-    
-    def extract_urls_from_opml(self, opml_file):
-        """Extract RSS feed URLs from an OPML file"""
-        try:
-            tree = ET.parse(opml_file)
-            root = tree.getroot()
-            
-            urls = []
-            for outline in root.findall('.//outline'):
-                url = outline.get('xmlUrl')
-                if url:
-                    urls.append(url)
-            
-            logger.info(f"Extracted {len(urls)} URLs from {opml_file}")
-            return urls
-        except Exception as e:
-            logger.error(f"Error extracting URLs from {opml_file}: {e}")
-            return []
     
     def fetch_articles_from_rss(self, url):
         """Fetch articles from a single RSS feed"""
@@ -48,12 +30,12 @@ class ArticleFetcher:
             logger.info(f"Fetching articles from {url}...")
             response = self.http_client.get(url, timeout=10)
             feed = feedparser.parse(response.content)
-            date_range = datetime.now() - timedelta(days=self.date_range_days)
             
             for entry in feed.entries:
                 try:
                     published_date = datetime(*entry.published_parsed[:6])
-                    if published_date > date_range:
+                    # Filter for the specific target date
+                    if published_date.date() == self.target_date:
                         article = {
                             'title': entry.title,
                             'link': entry.link,

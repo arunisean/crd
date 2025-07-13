@@ -1,76 +1,109 @@
-# Curated Research Digest (CRD)
+# Content Research Digest (CRD)
 
-## Overview
-CRD (Curated Research Digest) intelligently summarizing and curating the most important research and engineering developments in the Crypto, AI, and OS spaces.
+The Content Research Digest (CRD) is an automated pipeline that fetches articles from various RSS feeds, rates them based on custom criteria, summarizes the top-rated content using AI, and generates a web-based newsletter.
 
-## Workflow
-1. Fetches articles from RSS feeds
-2. Rates articles based on criteria 
-3. Summarizes top articles
-4. Generates newsletter with thumbnails
+## Features
 
-## Installation
-```bash
-pip install -e .
+- **Multi-Source Categorization**: Fetch news from different categories (e.g., Crypto, AI, Academic), each with its own set of RSS feeds and rating criteria defined in `feeds.json`.
+- **AI-Powered Rating & Summarization**: Uses an OpenAI-compatible API to rate articles and generate both English and Chinese summaries.
+- **Web Interface**: A simple Flask-based web application to display the generated newsletter and top-rated articles.
+- **Automated Pipeline**: A command-line interface to run the entire process from fetching to rendering.
+- **Extensible Configuration**: Easily configure API keys, models, and sources through a `.env` file.
+
+## Project Structure
+
+```
+crd/
+├── crd/
+│   ├── __init__.py
+│   ├── cli.py           # Main CLI entrypoint
+│   ├── fetcher.py
+│   ├── analyzer.py
+│   ├── summarizer.py
+│   ├── renderer.py
+│   ├── utils/           # Utility modules (config, api, etc.)
+│   ├── tests/           # Unit tests
+│   └── web/             # Flask web application
+│       ├── app.py
+│       ├── static/
+│       └── templates/
+├── .env.example         # Example environment file
+├── .gitignore
+├── feeds.json           # Feeds and criteria configuration
+├── newsletter_template.html
+└── requirements.txt
 ```
 
-## Project Introduction
+## Setup and Installation
 
-This project is an automated system for processing and generating newsletters. It retrieves articles from RSS feeds, performs rating and generates summaries, and ultimately creates an HTML newsletter with article summaries.
+1.  **Clone the Repository**
+    ```bash
+    git clone <your-repo-url>
+    cd crd
+    ```
 
-## File Structure
-- crd/ - Core package containing all business logic
-  - analyzer.py - Article rating logic
-  - summarizer.py - Article summarization
-  - renderer.py - Newsletter generation
-  - cli.py - Command line interface
-- main.py - Main entry point
-- newsletter_template.html - HTML template
-- feeds.opml - RSS feed subscriptions
+2.  **Create a Virtual Environment**
+    ```bash
+    python -m venv venv
+    source venv/bin/activate  # On Windows, use `venv\Scripts\activate`
+    ```
 
-## Configuration
-### Environment Variables
+3.  **Install Dependencies**
+    ```bash
+    pip install -r requirements.txt
+    ```
 
-Create a `.env` file in the project root directory and add the following content:
-```
-CUSTOM_API_URL=https://api.openai.com/v1/chat/completions  # URL of the custom OpenAI compatible API for article rating and summarization
-API_KEY=your_api_key  # API key to access the custom API
-RATING_CRITERIA=your_rating_criteria  # Criteria or rules for article rating
-TOP_ARTICLES=5  # Number of top-rated articles to select
-NEWSLETTER_TITLE=Article Summary Newsletter  # Title of the generated newsletter
-NEWSLETTER_FONT=Arial, sans-serif  # Font used in the newsletter
-WIDTH=800  # Width for rendering the HTML newsletter
-KEYWORDS=keyword1,keyword2  # Keywords used for filtering articles (comma-separated)
-THREADS=10  # Number of threads used for concurrent processing of RSS feeds
-DATE_RANGE_DAYS=7  # Date range (in days) for retrieving articles from RSS feeds
-RATING_MODEL=gpt-3.5-turbo  # Model used for rating articles
-SUMMARY_MODEL=gpt-4o  # Model used for summarizing articles
-TRANSLATION_MODEL=gpt-4o  # Model used for translating content
-```
+4.  **Install Playwright Browsers**
+    The project uses Playwright to render HTML to an image. You need to install its browser dependencies.
+    ```bash
+    playwright install
+    ```
+
+5.  **Configure Environment Variables**
+    Copy the example `.env` file and fill in your details.
+    ```bash
+    cp .env.example .env
+    ```
+    Now, edit `.env` with your API key and other settings.
+
+6.  **Configure Feeds**
+    Edit `feeds.json` to add or change categories, RSS feeds, and the AI rating criteria for each category.
 
 ## Usage
 
-### Preparation
+### Running the Content Pipeline
 
-Save your subscription OPML file in the current directory and rename it to `feeds.opml`.
-
-### Running the Main Script
-
-Run the following command in the project root directory:
+To generate a new newsletter, run the CLI. The output will be placed in `crd/web/static/output/` by default, ready for the web app to serve.
 
 ```bash
-python main.py
+python -m crd.cli
 ```
 
-This command will run all the sub-scripts sequentially, performing the entire process from article retrieval to rating, summarization, and newsletter generation.
+You can specify a different output directory:
+```bash
+python -m crd.cli --output-dir /path/to/your/output
+```
 
-### Advanced options
-crd --output-dir my_output --template custom_template.html --skip-cleanup
+### Running the Web Server
 
-### Contributing
+To view the generated content, start the Flask web server.
 
-Pull requests and issue reports are welcome. Feel free to reach out with any suggestions or improvements.
+```bash
+python -m crd.web.app
+```
 
-### License
+Now, open your browser and navigate to `http://127.0.0.1:5000`.
 
-This project is licensed under the MIT License. See the LICENSE file for more details.
+## Automation
+
+You can automate the content pipeline to run periodically using a `cron` job (on Linux/macOS).
+
+1.  Open your crontab for editing: `crontab -e`
+2.  Add the following line to run the pipeline every day at 9 AM. Make sure to use absolute paths to your virtual environment's Python executable and the project directory.
+
+    ```cron
+    # m h  dom mon dow   command
+    0 9 * * * /path/to/your/crd/venv/bin/python -m crd.cli > /path/to/your/crd/cron.log 2>&1
+    ```
+
+This will update the website's content daily.

@@ -5,6 +5,8 @@ import requests
 from urllib.parse import urlparse, parse_qs
 from bs4 import BeautifulSoup
 from jinja2 import Environment, FileSystemLoader
+from playwright.sync_api import sync_playwright
+from PIL import Image
 from .utils.io import write_file
 
 logger = logging.getLogger(__name__)
@@ -12,9 +14,45 @@ logger = logging.getLogger(__name__)
 class NewsletterRenderer:
     """Renders newsletter from article summaries"""
     
-    def __init__(self, title="Research Digest", font="Arial, sans-serif"):
+    def __init__(self, title="Research Digest", font="Arial, sans-serif", width=800):
         self.title = title
         self.font = font
+        self.width = width
+
+    def _render_html_to_png(self, html_file_path, output_png_path):
+        """Renders an HTML file to a PNG image using Playwright."""
+        device_pixel_ratio = 2  # For HiDPI
+        with sync_playwright() as p:
+            browser = p.chromium.launch()
+            page = browser.new_page(device_scale_factor=device_pixel_ratio)
+            
+            page.set_viewport_size({"width": self.width, "height": 1000})
+            
+            page.goto(f"file://{os.path.abspath(html_file_path)}")
+            
+            page.evaluate("""() => {
+                document.body.style.padding = '40px';
+                document.body.style.fontSize = '24px';
+                document.body.style.boxSizing = 'border-box';
+            }""")
+            
+            page.wait_for_load_state("networkidle")
+            
+            height = page.evaluate("document.documentElement.scrollHeight")
+            
+            page.set_viewport_size({"width": self.width, "height": height})
+            
+            screenshot = page.screenshot(full_page=True)
+            
+            browser.close()
+        
+        with open(output_png_path, 'wb') as f:
+            f.write(screenshot)
+        
+        image = Image.open(output_png_path)
+        image = image.crop((0, 0, self.width * device_pixel_ratio, height * device_pixel_ratio))
+        image.save(output_png_path)
+        logger.info(f"Rendered {html_file_path} to {output_png_path}")
     
     def get_youtube_thumbnail(self, url):
         """Get thumbnail URL for a YouTube video"""
@@ -96,6 +134,31 @@ class NewsletterRenderer:
         logger.warning("No thumbnail found")
         return None
     
+    def download_thumbnails(self, summaries_data, thumbnails_dir):
+        """Finds and downloads thumbnails for articles, updating the data dictionary."""
+        os.makedirs(thumbnails_dir, exist_ok=True)
+        for category, articles in summaries_data.items():
+            for article in articles:
+                thumbnail_url = self.get_thumbnail(article['url'])
+                if thumbnail_url:
+                    # Sanitize title for filename
+                    safe_filename = self.sanitize_filename(article['original_title'])
+                    # Get extension
+                    ext = os.path.splitext(urlparse(thumbnail_url).path)[1]
+                    if not ext or len(ext) > 5: # basic check for valid extension
+                        ext = '.jpg'
+                    thumbnail_filename = f"{safe_filename}{ext}"
+                    thumbnail_path = os.path.join(thumbnails_dir, thumbnail_filename)
+                    
+                    if self.download_thumbnail(thumbnail_url, thumbnail_path):
+                        # Store relative path for web app
+                        article['thumbnail'] = os.path.join('thumbnails', thumbnail_filename)
+                    else:
+                        article['thumbnail'] = None
+                else:
+                    article['thumbnail'] = None
+        return summaries_data
+    
     def sanitize_filename(self, filename):
         """Sanitize filename to be safe for file systems"""
         # Remove or replace special characters
@@ -124,72 +187,7 @@ class NewsletterRenderer:
         except requests.RequestException:
             return False
     
-    def write_titles_and_links(self, summaries, output_file):
-        """Write titles and links to a text file"""
-        content = ""
-        for data in summaries.values():
-            content += f"{data['chinese_title']}\n{data['url']}\n\n"
-        
-        return write_file(output_file, content)
-    
-    def process_thumbnails(self, summaries, thumbnails_dir):
-        """Process thumbnails for all articles"""
-        os.makedirs(thumbnails_dir, exist_ok=True)
-
-        for filename, data in summaries.items():
-            url = data['url']
-            safe_filename = self.sanitize_filename(filename)
-            thumbnail_filename = os.path.join(thumbnails_dir, f"{safe_filename.replace('.txt', '.png')}")
-            html_content = f"""
-            <!DOCTYPE html>
-            <html>
-            <head>
-                <title>{data['chinese_title']}</title>
-                <style>
-                    body {{
-                        font-family: Arial, sans-serif;
-                        padding: 20px;
-                    }}
-                </style>
-            </head>
-            <body>
-                <h1>{data['chinese_title']}</h1>
-                <p>{data['chinese_summary']}</p>
-            </body>
-            </html>
-            """
-            html_filename = os.path.join(thumbnails_dir, f"{safe_filename.replace('.txt', '.html')}")
-            if write_file(html_filename, html_content):
-                import subprocess
-                result = subprocess.run(['python', 'renderpng.py', html_filename, thumbnail_filename], capture_output=True, text=True)
-                if result.returncode == 0:
-                    data['thumbnail'] = os.path.relpath(thumbnail_filename)
-                    logger.info(f"Thumbnail generated and saved to {thumbnail_filename}")
-                else:
-                    logger.error(f"Error generating thumbnail: {result.stderr}")
-                    data['thumbnail'] = None
-                    logger.warning(f"Failed to generate thumbnail for {url}")
-            else:
-                data['thumbnail'] = None
-                logger.warning(f"Failed to generate thumbnail for {url}")
-            
-            # Add source to data
-            data['source'] = urlparse(url).netloc
-    
-    def render_newsletter(self, summaries, template_path, output_file):
-        """Render newsletter HTML using Jinja2 template"""
-        try:
-            env = Environment(loader=FileSystemLoader(os.path.dirname(template_path)))
-            template = env.get_template(os.path.basename(template_path))
-            newsletter_html = template.render(articles=summaries.values(), title=self.title, font=self.font)
-            write_file(output_file, newsletter_html)
-            logger.info(f"Newsletter rendered successfully to {output_file}")
-            return True
-        except Exception as e:
-            logger.error(f"Error rendering newsletter: {e}")
-            return False
-
-    def generate_top_news_image(self, summaries_data, output_path, template_path):
+    def generate_top_news_image(self, summaries_data, output_path):
         """Generate a single PNG image with the top news content."""
         # Create HTML content for the image
         html_content = f"""
@@ -213,15 +211,16 @@ class NewsletterRenderer:
         <body>
             <h1>Top News</h1>
         """
-        for data in summaries_data.values():
-            logger.info(f"URL: {data['url']}")
-            html_content += f"""
-            <div>
-                <h2>{data['chinese_title']}</h2>
-                <p>{data['chinese_summary']}</p>
-                <p>Source: <a href="{data['source']}">{data['source'].replace("www.", "")}</a></p>
-            </div>
-            """
+        for category, articles in summaries_data.items():
+            for data in articles:
+                logger.info(f"URL: {data['url']}")
+                html_content += f"""
+                <div>
+                    <h2>{data['chinese_title']}</h2>
+                    <p>{data['chinese_summary']}</p>
+                    <p>Source: <a href="{data['source']}">{data['source'].replace("www.", "")}</a></p>
+                </div>
+                """
         html_content += """
         </body>
         </html>
@@ -230,45 +229,26 @@ class NewsletterRenderer:
         # Create a temporary HTML file
         html_filename = os.path.join(os.path.dirname(output_path), "top_news.html")
         if write_file(html_filename, html_content):
-            # Generate the PNG image using renderpng.py
-            import subprocess
-            result = subprocess.run(['python', 'renderpng.py', html_filename, output_path], capture_output=True, text=True)
-            if result.returncode == 0:
+            try:
+                self._render_html_to_png(html_filename, output_path)
                 logger.info(f"Top news image generated and saved to {output_path}")
-            else:
-                logger.error(f"Error generating top news image: {result.stderr}")
+            except Exception as e:
+                logger.error(f"Error generating top news image: {e}", exc_info=True)
+            finally:
+                # Clean up temporary HTML file
+                if os.path.exists(html_filename):
+                    os.remove(html_filename)
         else:
             logger.error("Failed to create temporary HTML file for top news image")
 
-        # End of generate_top_news_image; the newsletter rendering is handled separately.
         return
     
-    def process(self, summaries_data, template_path, output_html, output_txt, thumbnails_dir):
-        """Process all steps to render the newsletter"""
-        # Generate top news image
-        top_news_image_path = os.path.join(thumbnails_dir, "top_news.png")
-        self.generate_top_news_image(summaries_data, top_news_image_path, template_path)
-
-        # Render newsletter
-        if self.render_newsletter(summaries_data, template_path, output_html):
-            logger.info(f"Newsletter created: {output_html}")
-
-        # Write titles and links
-        if self.write_titles_and_links(summaries_data, output_txt):
-            logger.info(f"Titles and links saved: {output_txt}")
-
-        return True
-        """Process all steps to render the newsletter"""
-        # Generate top news image
-        top_news_image_path = os.path.join(thumbnails_dir, "top_news.png")
-        self.generate_top_news_image(summaries_data, top_news_image_path, template_path)
-
-        # Render newsletter
-        if self.render_newsletter(summaries_data, template_path, output_html):
-            logger.info(f"Newsletter created: {output_html}")
-
-        # Write titles and links
-        if self.write_titles_and_links(summaries_data, output_txt):
-            logger.info(f"Titles and links saved: {output_txt}")
-
-        return True
+    def process(self, summaries_data, thumbnails_dir):
+        """Process all steps to render newsletter assets like images."""
+        # Generate top news image only if there are summaries
+        if summaries_data:
+            os.makedirs(thumbnails_dir, exist_ok=True)
+            top_news_image_path = os.path.join(thumbnails_dir, "top_news.png")
+            self.generate_top_news_image(summaries_data, top_news_image_path)
+            return True
+        return False

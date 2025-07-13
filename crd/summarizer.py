@@ -134,6 +134,10 @@ class ArticleSummarizer:
     def summarize_articles(self, articles_dir, summaries_dir):
         """Summarize multiple articles concurrently"""
         os.makedirs(summaries_dir, exist_ok=True)
+        if not os.path.isdir(articles_dir):
+            logger.warning(f"Directory with articles to summarize not found: {articles_dir}")
+            return {}
+
         results = {}
         
         # Get all article files

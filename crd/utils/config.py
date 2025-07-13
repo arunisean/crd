@@ -1,10 +1,11 @@
 import os
+import json
 from dotenv import load_dotenv
 
 class Config:
     """Configuration management class"""
     
-    def __init__(self, env_file='.env'):
+    def __init__(self, env_file='.env', feeds_config='feeds.json'):
         load_dotenv(env_file)
         
         # API settings
@@ -16,16 +17,7 @@ class Config:
         self.summary_model = os.getenv("SUMMARY_MODEL", "gpt-4o")
         self.translation_model = os.getenv("TRANSLATION_MODEL", "gpt-4o")
         
-        # Content settings
-        rating_criteria_path = os.getenv("RATING_CRITERIA", "")
-        if os.path.isfile(rating_criteria_path):
-            with open(rating_criteria_path, 'r', encoding='utf-8') as f:
-                self.rating_criteria = f.read().strip()
-        else:
-            self.rating_criteria = rating_criteria_path
-        self.top_articles = int(os.getenv("TOP_ARTICLES", 5))
-        self.keywords = os.getenv("KEYWORDS", "").split(',')
-        self.opml_file = os.getenv("OPML_FILE", "feeds.opml")
+        self.feeds_config = self.load_feeds_config(feeds_config)
         
         # Newsletter settings
         self.newsletter_title = os.getenv("NEWSLETTER_TITLE", "Article Summary Newsletter")
@@ -36,3 +28,16 @@ class Config:
         # Processing settings
         self.threads = int(os.getenv("THREADS", 10))
         self.date_range_days = int(os.getenv("DATE_RANGE_DAYS", 7))
+        self.top_articles = int(os.getenv("TOP_ARTICLES", 5))
+        self.keywords = os.getenv("KEYWORDS", "").split(',') if os.getenv("KEYWORDS") else []
+
+    def load_feeds_config(self, config_path):
+        """Loads the feeds configuration from a JSON file."""
+        if os.path.isfile(config_path):
+            try:
+                with open(config_path, 'r', encoding='utf-8') as f:
+                    return json.load(f)
+            except (json.JSONDecodeError, FileNotFoundError) as e:
+                print(f"Error loading feeds config '{config_path}': {e}")
+                return {}
+        return {}

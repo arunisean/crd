@@ -1,0 +1,23 @@
+{
+  "Crypto": {
+    "rating_criteria": "Is this article about significant events, technological breakthroughs, or market analysis in the cryptocurrency or blockchain space? Avoid minor price fluctuations or promotional content.",
+    "feeds": [
+      "https://cointelegraph.com/rss"
+    ]
+  },
+  "AI & Tech": {
+    "rating_criteria": "Does this article discuss new research, a significant product launch, or a major industry trend in Artificial Intelligence, SaaS, or general technology? Focus on impactful news.",
+    "feeds": [
+      "https://news.ycombinator.com/rss",
+      "https://www.producthunt.com/feed",
+      "https://techcrunch.com/feed/"
+    ]
+  },
+  "Academic": {
+    "rating_criteria": "Is this a pre-print or published paper from a reputable source like ArXiv, discussing a novel method, experiment, or finding in computer science or a related field?",
+    "feeds": [
+      "http://export.arxiv.org/rss/cs.AI",
+      "http://export.arxiv.org/rss/cs.CL"
+    ]
+  }
+}

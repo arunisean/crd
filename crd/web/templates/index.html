@@ -1,0 +1,36 @@
+{% extends "layout.html" %}
+{% block content %}
+    <div class="date-tabs">
+        {% for date in available_dates %}
+            <a href="{{ url_for('home', date=date) }}" class="date-tab {% if date == selected_date %}active{% endif %}">
+                {{ date }}
+            </a>
+        {% endfor %}
+    </div>
+
+    {% if articles_by_category and selected_date %}
+        {% for category, articles in articles_by_category.items() %}
+            <div class="category-section">
+                <h2>{{ category }}</h2>
+                {% for article in articles %}
+                <div class="article">
+                    {% if article.thumbnail %}
+                    <div class="article-thumbnail">
+                        <a href="{{ article.url }}" target="_blank">
+                            <img src="{{ url_for('static', filename='output/' + selected_date + '/' + article.thumbnail) }}" alt="{{ article.original_title }}">
+                        </a>
+                    </div>
+                    {% endif %}
+                    <div class="article-content">
+                        <h3><a href="{{ article.url }}" target="_blank">{{ article.original_title }}</a></h3>
+                        <p>{{ article.english_summary }}</p>
+                        <p><em>Source: <a href="{{ article.url }}" target="_blank">{{ article.source }}</a></em></p>
+                    </div>
+                </div>
+                {% endfor %}
+            </div>
+        {% endfor %}
+    {% else %}
+        <p>No content available for {% if selected_date %}{{ selected_date }}{% else %}today{% endif %}. Please run the pipeline.</p>
+    {% endif %}
+{% endblock %}

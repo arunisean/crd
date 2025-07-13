@@ -11,9 +11,9 @@ logger = logging.getLogger(__name__)
 class ArticleAnalyzer:
     """Analyzes and rates articles"""
     
-    def __init__(self, api_client, config, top_articles=5, max_workers=10, model="gpt-3.5-turbo"):
+    def __init__(self, api_client, rating_criteria, top_articles=5, max_workers=10, model="gpt-3.5-turbo"):
         self.api_client = api_client
-        self.rating_criteria = config.rating_criteria
+        self.rating_criteria = rating_criteria
         self.top_articles = top_articles
         self.max_workers = max_workers
         self.model = model  # Store model parameter
@@ -100,36 +100,44 @@ class ArticleAnalyzer:
     def select_top_articles(self, scores, articles_dir, high_rated_dir):
         """Select top-rated articles and copy them to a directory"""
         os.makedirs(high_rated_dir, exist_ok=True)
-        
+
         # Sort by score and select top articles
         scores.sort(key=lambda x: x[1], reverse=True)
-        top_articles = scores[:self.top_articles]
-        
+        top_articles_scores = scores[:self.top_articles]
+
+        top_articles_data = []
         # Copy top articles to high_rated_dir
-        for filename, score in top_articles:
+        for filename, score in top_articles_scores:
             src = os.path.join(articles_dir, filename)
             dst = os.path.join(high_rated_dir, filename)
             shutil.copy2(src, dst)
             logger.info(f"Copied {filename} to {high_rated_dir} (Score: {score})")
-        
-        return top_articles
-    
+
+            # Extract title and URL for better output
+            content = read_file(src)
+            if content:
+                url_match = re.search(r'^URL:\s*(.*)', content, re.MULTILINE)
+                title_match = re.search(r'^Title:\s*(.*)', content, re.MULTILINE)
+                url = url_match.group(1) if url_match else ''
+                title = title_match.group(1) if title_match else filename
+                top_articles_data.append({"filename": filename, "score": score, "title": title, "url": url})
+
+        return top_articles_data
+
     def process(self, articles_dir, high_rated_dir, ratings_file):
         """Process all articles: rate them and select top ones"""
+        if not os.path.exists(articles_dir) or not os.listdir(articles_dir):
+            logger.warning(f"No articles found in {articles_dir} to analyze.")
+            return []
+
         # Rate all articles
         results, scores = self.rate_articles(articles_dir)
-        
+
         # Select top articles
         top_articles = self.select_top_articles(scores, articles_dir, high_rated_dir)
-        
+
         # Save ratings to file
         if write_json(ratings_file, results):
             logger.info(f"Ratings saved to {ratings_file}")
-        
-        # Save top articles with scores to a file
-        top_articles_file = os.path.join(os.path.dirname(ratings_file), "top_articles.json")
-        top_articles_with_scores = [{"filename": filename, "score": score} for filename, score in top_articles]
-        if write_json(top_articles_file, top_articles_with_scores):
-            logger.info(f"Top articles saved to {top_articles_file}")
-        
+
         return top_articles

@@ -2,7 +2,7 @@
 # Archive folder
 archives/
 .env
-*.md
 crd/__pycache__/*
-Output/*
 *.pyc
+venv/*
+crd/web/static/output/
