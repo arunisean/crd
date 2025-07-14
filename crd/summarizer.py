@@ -1,37 +1,18 @@
-import os
 import logging
-import re
 from concurrent.futures import ThreadPoolExecutor
 import pangu
-from urllib.parse import urlparse
-from .utils.io import read_file, write_file, write_json
 
 logger = logging.getLogger(__name__)
 
 class ArticleSummarizer:
-    """Summarizes articles using an AI API"""
+    """Summarizes articles using an AI API and updates the database."""
     
-    def __init__(self, api_client, model="gpt-4o", max_workers=10):
+    def __init__(self, db_manager, api_client, stats_manager=None, model="gpt-4o", max_workers=10):
+        self.db_manager = db_manager
         self.api_client = api_client
         self.model = model
         self.max_workers = max_workers
-    
-    def extract_url_and_title(self, content):
-        """Extract URL and title from article content"""
-        lines = content.split('\n')
-        url = ''
-        title = ''
-        
-        for line in lines:
-            if line.startswith('URL:'):
-                url = line.replace('URL:', '').strip()
-            elif line.startswith('Title:'):
-                title = line.replace('Title:', '').strip()
-            
-            if url and title:
-                break
-        
-        return url, title
+        self.stats_manager = stats_manager
     
     def get_chinese_title_and_summary(self, title, content, url):
         """Get Chinese title and summary for an article"""
@@ -53,23 +34,26 @@ class ArticleSummarizer:
             ]
         }
         
-        try:
-            # Get translated title
-            title_response = self.api_client.request(title_payload)
-            chinese_title = title_response['choices'][0]['message']['content'].strip()
-            
-            # Get Chinese summary
-            content_response = self.api_client.request(content_payload)
-            chinese_summary = content_response['choices'][0]['message']['content'].strip()
-            
-            # Apply pangu spacing
-            chinese_title = pangu.spacing_text(chinese_title)
-            chinese_summary = pangu.spacing_text(chinese_summary)
-            
-            return chinese_title, chinese_summary
-        except Exception as e:
-            logger.error(f"Error getting Chinese title and summary: {e}")
-            return None, None
+        with self.stats_manager.time_block('summarizer_zh_api_call') if self.stats_manager else open(os.devnull, 'w'):
+            try:
+                # Get translated title
+                title_response = self.api_client.request(title_payload)
+                chinese_title = title_response['choices'][0]['message']['content'].strip()
+                
+                # Get Chinese summary
+                content_response = self.api_client.request(content_payload)
+                chinese_summary = content_response['choices'][0]['message']['content'].strip()
+                
+                # Apply pangu spacing
+                chinese_title = pangu.spacing_text(chinese_title)
+                chinese_summary = pangu.spacing_text(chinese_summary)
+                
+                if self.stats_manager: self.stats_manager.increment('summaries_zh_success')
+                return chinese_title, chinese_summary
+            except Exception as e:
+                logger.error(f"Error getting Chinese title and summary: {e}")
+                if self.stats_manager: self.stats_manager.increment('summaries_zh_failed')
+                return None, None
 
     def get_english_summary(self, title, content):
         """Get English summary for an article"""
@@ -81,89 +65,60 @@ class ArticleSummarizer:
             ]
         }
 
-        try:
-            content_response = self.api_client.request(content_payload)
-            english_summary = content_response['choices'][0]['message']['content'].strip()
-            return english_summary
-        except Exception as e:
-            logger.error(f"Error getting English summary: {e}")
-            return None
+        with self.stats_manager.time_block('summarizer_en_api_call') if self.stats_manager else open(os.devnull, 'w'):
+            try:
+                content_response = self.api_client.request(content_payload)
+                english_summary = content_response['choices'][0]['message']['content'].strip()
+                if self.stats_manager: self.stats_manager.increment('summaries_en_success')
+                return english_summary
+            except Exception as e:
+                logger.error(f"Error getting English summary: {e}")
+                if self.stats_manager: self.stats_manager.increment('summaries_en_failed')
+                return None
 
-    def summarize_article(self, file_path, output_dir):
-        """Summarize a single article"""
-        filename = os.path.basename(file_path)
-        logger.info(f"Summarizing article: {filename}")
-        
-        content = read_file(file_path)
+    def summarize_article(self, article):
+        """Summarize a single article and update it in the database."""
+        article_id = article['id']
+        title = article['title']
+        content = article['content']
+        url = article['url']
+
         if not content:
-            return filename, None
-        
-        url, title = self.extract_url_and_title(content)
-        
-        # Remove URL and title lines from content
-        content = '\n'.join(line for line in content.split('\n') 
-                           if not line.startswith(('URL:', 'Title:')))
+            logger.warning(f"Article {title} (ID: {article_id}) has no content to summarize.")
+            return
+
+        logger.info(f"Summarizing article ID {article_id}: {title}")
         
         chinese_title, chinese_summary = self.get_chinese_title_and_summary(title, content, url)
-        if chinese_summary and chinese_title:
-            # Get English summary
-            english_summary = self.get_english_summary(title, content)
+        english_summary = self.get_english_summary(title, content)
 
-            if english_summary:
-                summary_filename = f"summary_{filename}"
-                summary_path = os.path.join(output_dir, summary_filename)
-
-                summary_content = f"Title: {title}\n标题：{chinese_title}\n\nURL: {url}\n\nSummary: {english_summary}\n\n摘要：{chinese_summary}"
-
-                if write_file(summary_path, summary_content):
-                    logger.info(f"Chinese and English titles and summaries for {filename} saved")
-
-                    return filename, {
-                        "url": url,
-                        "original_title": title,
-                        "chinese_title": chinese_title,
-                        "chinese_summary": chinese_summary,
-                        "english_summary": english_summary,
-                        "source": urlparse(url).netloc
-                    }
-            else:
-                logger.warning(f"Failed to get English summary for {filename}")
+        # Proceed to save even if some parts of the summary are missing.
+        if chinese_title or chinese_summary or english_summary:
+            self.db_manager.update_article_summary(
+                article_id,
+                chinese_title,
+                english_summary,
+                chinese_summary
+            )
+            if self.stats_manager: self.stats_manager.increment('articles_summarized_in_db')
+            logger.info(f"Successfully summarized (possibly partially) and saved to DB: {title}")
         else:
-            logger.warning(f"Failed to get Chinese title and summary for {filename}")
-        return filename, None
-    def summarize_articles(self, articles_dir, summaries_dir):
-        """Summarize multiple articles concurrently"""
-        os.makedirs(summaries_dir, exist_ok=True)
-        if not os.path.isdir(articles_dir):
-            logger.warning(f"Directory with articles to summarize not found: {articles_dir}")
-            return {}
+            logger.error(f"All summarization attempts failed for article: {title}")
 
-        results = {}
+    def process(self, category, date_str):
+        """
+        Fetches articles marked for summarization from the DB, summarizes them,
+        and updates the results back to the DB.
+        """
+        articles_to_summarize = self.db_manager.get_articles_by_status('selected_for_summary', category, date_str)
         
-        # Get all article files
-        article_files = []
-        for filename in os.listdir(articles_dir):
-            if filename.endswith('.txt'):
-                article_files.append(os.path.join(articles_dir, filename))
-        
-        # Summarize articles concurrently
+        if not articles_to_summarize:
+            logger.info(f"No articles to summarize for category '{category}' on {date_str}.")
+            return
+
+        logger.info(f"Found {len(articles_to_summarize)} articles to summarize for '{category}' on {date_str}.")
+
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            for filename, summary_data in executor.map(
-                lambda file_path: self.summarize_article(file_path, summaries_dir),
-                article_files
-            ):
-                if summary_data:
-                    results[filename] = summary_data
+            list(executor.map(self.summarize_article, articles_to_summarize))
         
-        return results
-    
-    def process(self, articles_dir, summaries_dir, summaries_file):
-        """Process all articles: summarize them and save results"""
-        # Summarize all articles
-        results = self.summarize_articles(articles_dir, summaries_dir)
-        
-        # Save summaries to file
-        if write_json(summaries_file, results):
-            logger.info(f"Summaries saved to {summaries_file}")
-        
-        return results
+        logger.info(f"Finished summarizing articles for '{category}' on {date_str}.")

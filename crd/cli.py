@@ -11,6 +11,7 @@ from .fetcher import ArticleFetcher
 from .analyzer import ArticleAnalyzer
 from .summarizer import ArticleSummarizer
 from .renderer import NewsletterRenderer
+from .utils.stats import StatsManager
 from .utils.api_client import APIClient
 
 def parse_args():
@@ -50,6 +51,9 @@ def main():
     # Setup Database
     db_manager = DatabaseManager(args.db_path)
 
+    # Setup Stats Manager
+    stats_manager = StatsManager()
+
     # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
     
@@ -66,8 +70,9 @@ def main():
 
             # If not forcing, check if we can skip
             if not args.force and not is_force_category:
-                if os.path.exists(output_dir_for_date) and os.listdir(output_dir_for_date):
-                    logger.info(f"Data for {date_str} already exists. Skipping.")
+                # A more reliable check is to see if the DB has 'complete' articles for the date.
+                if db_manager.has_complete_articles(date_str):
+                    logger.info(f"Data for {date_str} appears complete in DB. Skipping.")
                     continue
 
             if args.force:
@@ -87,54 +92,69 @@ def main():
                     logger.info(f"--- Processing category: {category} for {date_str} ---")
 
                     # 1. Fetch articles
-                    fetcher = ArticleFetcher(
-                        db_manager=db_manager,
-                        target_date=target_date,
-                        max_workers=config.threads,
-                        keywords=config.keywords
-                    )
-                    articles = fetcher.fetch_all_articles(settings['feeds'])
-                    articles_with_category = [(art, category) for art in articles]
-                    use_playwright = settings.get('use_playwright', False)
-                    fetcher.process_articles(articles_with_category, use_playwright=use_playwright)
+                    with stats_manager.time_block(f"fetch_{category}"):
+                        fetcher = ArticleFetcher(
+                            db_manager=db_manager,
+                            stats_manager=stats_manager,
+                            target_date=target_date,
+                            max_workers=config.threads,
+                            keywords=config.keywords
+                        )
+                        articles = fetcher.fetch_all_articles(settings['feeds'])
+                        articles_with_category = [(art, category) for art in articles]
+                        use_playwright = settings.get('use_playwright', False)
+                        fetcher.process_articles(articles_with_category, use_playwright=use_playwright)
 
                     # 2. Rate articles and select top ones
-                    analyzer = ArticleAnalyzer(
-                        db_manager=db_manager,
-                        api_client=api_client,
-                        rating_criteria=settings['rating_criteria'],
-                        top_articles=config.top_articles,
-                        max_workers=config.threads,
-                        model=config.rating_model
-                    )
-                    analyzer.process(category, date_str)
+                    with stats_manager.time_block(f"analyze_{category}"):
+                        analyzer = ArticleAnalyzer(
+                            db_manager=db_manager,
+                            api_client=api_client,
+                            rating_criteria=settings['rating_criteria'],
+                            stats_manager=stats_manager,
+                            top_articles=config.top_articles,
+                            max_workers=config.threads,
+                            model=config.rating_model
+                        )
+                        analyzer.process(category, date_str)
 
                     # 3. Summarize high-rated articles
-                    summarizer = ArticleSummarizer(
-                        api_client=api_client,
-                        model=config.summary_model,
-                        max_workers=config.threads
-                    )
-                    summarizer.process(category, date_str)
+                    with stats_manager.time_block(f"summarize_{category}"):
+                        summarizer = ArticleSummarizer(
+                            db_manager=db_manager,
+                            api_client=api_client,
+                            stats_manager=stats_manager,
+                            model=config.summary_model,
+                            max_workers=config.threads
+                        )
+                        summarizer.process(category, date_str)
 
                     # 4. Process thumbnails
-                    thumbnails_dir = os.path.join(output_dir_for_date, 'thumbnails')
-                    renderer = NewsletterRenderer(db_manager=db_manager)
-                    renderer.process_thumbnails(category, date_str, thumbnails_dir)
+                    with stats_manager.time_block(f"thumbnails_{category}"):
+                        thumbnails_dir = os.path.join(output_dir_for_date, 'thumbnails')
+                        renderer = NewsletterRenderer(db_manager=db_manager, stats_manager=stats_manager)
+                        renderer.process_thumbnails(category, date_str, thumbnails_dir)
+
+                    # 5. Finalize status
+                    with stats_manager.time_block(f"finalize_{category}"):
+                        logger.info(f"Finalizing status for articles in '{category}' on {date_str}.")
+                        db_manager.finalize_articles_status(category, date_str)
 
                 except Exception as e:
                     logger.error(f"Failed to process category '{category}' for {date_str}. Skipping.", exc_info=True)
                     continue
 
             # 5. Generate final assets for the date (e.g., top news image)
-            logger.info(f"--- Finalizing assets for {date_str} ---")
-            renderer = NewsletterRenderer(
-                db_manager=db_manager,
-                title=config.newsletter_title,
-                font=config.newsletter_font,
-                width=config.width
-            )
-            renderer.process(date_str, output_dir_for_date)
+            with stats_manager.time_block(f"render_final_{date_str}"):
+                logger.info(f"--- Finalizing assets for {date_str} ---")
+                renderer = NewsletterRenderer(
+                    db_manager=db_manager,
+                    stats_manager=stats_manager,
+                    title=config.newsletter_title,
+                    font=config.newsletter_font,
+                    width=config.width
+                )
+                renderer.process(date_str, output_dir_for_date)
 
             logger.info(f"Successfully generated data for {date_str}")
 
@@ -143,6 +163,7 @@ def main():
             continue # Continue to the next day
     
     db_manager.close()
+    stats_manager.report()
     return 0
 
 if __name__ == "__main__":

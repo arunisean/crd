@@ -30,10 +30,8 @@ def close_db(error):
 @app.route('/<date_str>')
 def index(date_str=None):
     db = get_db()
-    
-    # Get available dates from the output directory structure
-    output_dir = app.config['OUTPUT_DIR']
-    available_dates = sorted([d for d in os.listdir(output_dir) if os.path.isdir(os.path.join(output_dir, d))], reverse=True)
+    # Get available dates directly from the database for accuracy
+    available_dates = db.get_available_dates()
     
     if not date_str:
         date_str = available_dates[0] if available_dates else datetime.now().strftime('%Y-%m-%d')

@@ -7,6 +7,7 @@ from bs4 import BeautifulSoup
 from youtube_transcript_api import YouTubeTranscriptApi
 from urllib.parse import urlparse, parse_qs
 from datetime import datetime, timedelta
+import time
 import os
 import logging
 import csv
@@ -17,11 +18,12 @@ logger = logging.getLogger(__name__)
 class ArticleFetcher:
     """Fetches articles from RSS feeds"""
 
-    def __init__(self, db_manager, http_client=None, target_date=None, max_workers=10, keywords=None):
+    def __init__(self, db_manager, stats_manager=None, http_client=None, target_date=None, max_workers=10, keywords=None):
         self.http_client = http_client or requests
         self.db_manager = db_manager
         self.target_date = target_date or datetime.now().date()
         self.max_workers = max_workers
+        self.stats_manager = stats_manager
         self.keywords = keywords or []
     
     def fetch_articles_from_rss(self, url):
@@ -29,6 +31,8 @@ class ArticleFetcher:
         articles = []
         try:
             logger.info(f"Fetching articles from {url}...")
+            if self.stats_manager:
+                self.stats_manager.increment('rss_feeds_fetched')
             response = self.http_client.get(url, timeout=10)
             feed = feedparser.parse(response.content)
             
@@ -55,6 +59,8 @@ class ArticleFetcher:
                     
             logger.info(f"Found {len(articles)} articles from {url}")
         except Exception as e:
+            if self.stats_manager:
+                self.stats_manager.increment('rss_feeds_failed')
             logger.error(f"Error fetching articles from {url}: {e}")
         return articles
     
@@ -79,27 +85,37 @@ class ArticleFetcher:
             logger.info(f"Fetching HTML content from {url}")
             headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36'}
             response = self.http_client.get(url, timeout=10, headers=headers)
+            if self.stats_manager:
+                self.stats_manager.increment('http_fetches_success')
             response.raise_for_status()
             logger.info(f"Response status code: {response.status_code}")
             return response.text
         except Exception as e:
+            if self.stats_manager:
+                self.stats_manager.increment('http_fetches_failed')
             logger.error(f"Error fetching HTML content from {url}: {e}, URL: {url}")
             return None
     
     def fetch_html_with_playwright(self, url):
         """Fetch HTML content from a URL using Playwright for JS-heavy sites."""
-        try:
-            logger.info(f"Fetching HTML with Playwright from {url}")
-            with sync_playwright() as p:
-                browser = p.chromium.launch()
-                page = browser.new_page()
-                page.goto(url, wait_until='networkidle', timeout=20000)
-                content = page.content()
-                browser.close()
-                return content
-        except PlaywrightError as e:
-            logger.error(f"Error fetching HTML with Playwright from {url}: {e}")
-            return None
+        with self.stats_manager.time_block('fetcher_playwright_fetch') if self.stats_manager else open(os.devnull, 'w'):
+            try:
+                logger.info(f"Fetching HTML with Playwright from {url}")
+                with sync_playwright() as p:
+                    browser = p.chromium.launch()
+                    page = browser.new_page()
+                    # Increased timeout and changed wait condition for more reliability
+                    page.goto(url, wait_until='domcontentloaded', timeout=60000)
+                    content = page.content()
+                    browser.close()
+                    if self.stats_manager:
+                        self.stats_manager.increment('playwright_fetches_success')
+                    return content
+            except PlaywrightError as e:
+                if self.stats_manager:
+                    self.stats_manager.increment('playwright_fetches_failed')
+                logger.error(f"Error fetching HTML with Playwright from {url}: {e}")
+                return None
 
     def extract_article_content(self, html):
         """Extract article content from HTML"""
@@ -206,6 +222,8 @@ class ArticleFetcher:
             }
             if self.db_manager.add_article(article_data):
                 logger.info(f"Saved article to DB: {title}")
+                if self.stats_manager:
+                    self.stats_manager.increment('articles_saved_to_db')
                 return True
         return False
 

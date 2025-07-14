@@ -152,6 +152,42 @@ class DatabaseManager:
             logger.error(f"Failed to get summarized articles for {date_str}: {e}")
             return {}
 
+    def get_available_dates(self):
+        """Get a sorted list of distinct dates that have completed articles."""
+        sql = "SELECT DISTINCT fetch_date FROM articles WHERE status IN ('summarized', 'complete') ORDER BY fetch_date DESC"
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(sql)
+            return [row['fetch_date'] for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            logger.error(f"Failed to get available dates: {e}")
+            return []
+
+    def has_complete_articles(self, date_str):
+        """Check if there are any articles with status 'complete' for a given date."""
+        # We check for at least one 'complete' article as a sign that the day's run finished.
+        sql = "SELECT 1 FROM articles WHERE fetch_date = ? AND status = 'complete' LIMIT 1"
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(sql, (date_str,))
+            return cursor.fetchone() is not None
+        except sqlite3.Error as e:
+            logger.error(f"Failed to check for complete articles on {date_str}: {e}")
+            return False # Assume not complete on error
+
+    def finalize_articles_status(self, category, date_str):
+        """Mark all summarized articles as complete for a given category and date."""
+        # This ensures articles are displayed even if thumbnail generation fails.
+        sql = "UPDATE articles SET status = 'complete' WHERE status = 'summarized' AND category = ? AND fetch_date = ?"
+        try:
+            cursor = self.conn.cursor()
+            updated_rows = cursor.execute(sql, (category, date_str)).rowcount
+            self.conn.commit()
+            if updated_rows > 0:
+                logger.info(f"Finalized status for {updated_rows} articles in '{category}' on {date_str}.")
+        except sqlite3.Error as e:
+            logger.error(f"Failed to finalize article status for {category} on {date_str}: {e}")
+
     def clear_category_for_date(self, category, date_str):
         """Delete all articles for a specific category and date."""
         sql = "DELETE FROM articles WHERE category = ? AND fetch_date = ?"

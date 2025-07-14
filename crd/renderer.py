@@ -14,10 +14,11 @@ logger = logging.getLogger(__name__)
 class NewsletterRenderer:
     """Renders newsletter from article summaries"""
 
-    def __init__(self, db_manager, title="Research Digest", font="Arial, sans-serif", width=800):
+    def __init__(self, db_manager, stats_manager=None, title="Research Digest", font="Arial, sans-serif", width=800):
         self.db_manager = db_manager
         self.title = title
         self.font = font
+        self.stats_manager = stats_manager
         self.width = width
 
     def _render_html_to_png(self, html_file_path, output_png_path):
@@ -29,7 +30,7 @@ class NewsletterRenderer:
             
             page.set_viewport_size({"width": self.width, "height": 1000})
             
-            page.goto(f"file://{os.path.abspath(html_file_path)}")
+            page.goto(f"file://{os.path.abspath(html_file_path)}", wait_until='networkidle', timeout=60000)
             
             page.evaluate("""() => {
                 document.body.style.padding = '40px';
@@ -37,7 +38,7 @@ class NewsletterRenderer:
                 document.body.style.boxSizing = 'border-box';
             }""")
             
-            page.wait_for_load_state("networkidle")
+            page.wait_for_load_state("networkidle", timeout=60000)
             
             height = page.evaluate("document.documentElement.scrollHeight")
             
@@ -170,12 +171,16 @@ class NewsletterRenderer:
                 thumbnail_abs_path = os.path.join(thumbnails_dir, thumbnail_filename)
                 if self.download_thumbnail(thumbnail_url, thumbnail_abs_path):
                     thumbnail_rel_path = os.path.join('thumbnails', thumbnail_filename)
+                    if self.stats_manager:
+                        self.stats_manager.increment('thumbnails_downloaded')
             else:
                 logger.info(f"No thumbnail found for {article['url']}. Attempting to take a screenshot.")
                 screenshot_filename = f"{safe_filename}.png"
                 screenshot_abs_path = os.path.join(thumbnails_dir, screenshot_filename)
                 if self.screenshot_article(article['url'], screenshot_abs_path):
                     thumbnail_rel_path = os.path.join('thumbnails', screenshot_filename)
+                    if self.stats_manager:
+                        self.stats_manager.increment('thumbnails_screenshotted')
 
             if thumbnail_rel_path:
                 self.db_manager.update_article_thumbnail(article['id'], thumbnail_rel_path)
@@ -183,16 +188,21 @@ class NewsletterRenderer:
     def screenshot_article(self, url, output_path):
         """Takes a screenshot of the top part of a webpage."""
         try:
-            with sync_playwright() as p:
-                browser = p.chromium.launch()
-                page = browser.new_page(viewport={'width': 1200, 'height': 800})
-                page.goto(url, wait_until='networkidle', timeout=20000)
-                page.screenshot(path=output_path)
-                browser.close()
-            logger.info(f"Successfully took screenshot for {url} at {output_path}")
-            return True
+            with self.stats_manager.time_block('renderer_screenshot_article') if self.stats_manager else open(os.devnull, 'w'):
+                with sync_playwright() as p:
+                    browser = p.chromium.launch()
+                    page = browser.new_page(viewport={'width': 1200, 'height': 800})
+                    page.goto(url, wait_until='domcontentloaded', timeout=60000)
+                    page.screenshot(path=output_path)
+                    browser.close()
+                logger.info(f"Successfully took screenshot for {url} at {output_path}")
+                if self.stats_manager:
+                    self.stats_manager.increment('screenshots_success')
+                return True
         except Exception as e:
             logger.error(f"Failed to take screenshot for {url}: {e}")
+            if self.stats_manager:
+                self.stats_manager.increment('screenshots_failed')
             return False
 
     def sanitize_filename(self, filename):
@@ -268,6 +278,8 @@ class NewsletterRenderer:
             try:
                 self._render_html_to_png(html_filename, output_path)
                 logger.info(f"Top news image generated and saved to {output_path}")
+                if self.stats_manager:
+                    self.stats_manager.increment('top_news_image_generated')
             except Exception as e:
                 logger.error(f"Error generating top news image: {e}", exc_info=True)
             finally:
