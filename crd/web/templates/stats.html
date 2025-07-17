@@ -1,0 +1,56 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Data Health Check</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <style>
+        body { padding: 2rem; }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 1rem;
+        }
+        th, td {
+            border: 1px solid #ddd;
+            padding: 8px;
+            text-align: left;
+        }
+        th {
+            background-color: #f2f2f2;
+        }
+    </style>
+</head>
+<body>
+    <h1>Data Health Check</h1>
+    <p>This page shows the number of articles in the database, grouped by date, category, and status.</p>
+    <nav>
+        <a href="/">Back to Home</a>
+    </nav>
+    <table>
+        <thead>
+            <tr>
+                <th>Fetch Date</th>
+                <th>Category</th>
+                <th>Status</th>
+                <th>Article Count</th>
+            </tr>
+        </thead>
+        <tbody>
+            {% for row in stats %}
+            <tr>
+                <td>{{ row.fetch_date }}</td>
+                <td>{{ row.category }}</td>
+                <td>{{ row.status }}</td>
+                <td>{{ row.count }}</td>
+            </tr>
+            {% else %}
+            <tr>
+                <td colspan="4">No statistics found.</td>
+            </tr>
+            {% endfor %}
+        </tbody>
+    </table>
+</body>
+</html>

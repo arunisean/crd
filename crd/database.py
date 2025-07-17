@@ -41,7 +41,7 @@ class DatabaseManager:
                     source TEXT
                 )
             """)
-            self.conn.commit()
+
             logger.info("Tables created or already exist.")
         except sqlite3.Error as e:
             logger.error(f"Error creating tables: {e}")
@@ -135,26 +135,42 @@ class DatabaseManager:
         except sqlite3.Error as e:
             logger.error(f"Failed to update thumbnail for article {article_id}: {e}")
 
+    def _row_to_dict(self, row):
+        """Converts a sqlite3.Row object to a dictionary."""
+        return dict(row) if row else None
+
     def get_summarized_articles_for_date(self, date_str):
-        """Get all summarized articles for a specific date, grouped by category."""
-        sql = "SELECT * FROM articles WHERE fetch_date = ? AND status IN ('summarized', 'complete') ORDER BY category, score DESC"
+        """Get all completed or summarized articles for a specific date, grouped by category."""
+        sql = "SELECT * FROM articles WHERE fetch_date = ? AND status IN ('complete', 'summarized') AND chinese_summary IS NOT NULL AND chinese_summary != '' ORDER BY category, score DESC"
         try:
             cursor = self.conn.cursor()
             cursor.execute(sql, (date_str,))
             articles_by_category = {}
             for row in cursor.fetchall():
-                category = row['category']
+                article_dict = self._row_to_dict(row)
+                category = article_dict['category']
                 if category not in articles_by_category:
                     articles_by_category[category] = []
-                articles_by_category[category].append(dict(row))
+                articles_by_category[category].append(article_dict)
             return articles_by_category
         except sqlite3.Error as e:
             logger.error(f"Failed to get summarized articles for {date_str}: {e}")
             return {}
 
+    def get_summarized_articles_for_category_and_date(self, category, date_str):
+        """Get all completed or summarized articles for a specific category and date."""
+        sql = "SELECT * FROM articles WHERE fetch_date = ? AND category = ? AND status IN ('complete', 'summarized') AND chinese_summary IS NOT NULL AND chinese_summary != '' ORDER BY score DESC"
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(sql, (date_str, category))
+            return [self._row_to_dict(row) for row in cursor.fetchall()]
+        except sqlite3.Error as e:
+            logger.error(f"Failed to get summarized articles for {category} on {date_str}: {e}")
+            return []
+
     def get_available_dates(self):
-        """Get a sorted list of distinct dates that have completed articles."""
-        sql = "SELECT DISTINCT fetch_date FROM articles WHERE status IN ('summarized', 'complete') ORDER BY fetch_date DESC"
+        """Get a sorted list of distinct dates that have completed or summarized articles."""
+        sql = "SELECT DISTINCT fetch_date FROM articles WHERE status IN ('complete', 'summarized') AND chinese_summary IS NOT NULL AND chinese_summary != '' ORDER BY fetch_date DESC"
         try:
             cursor = self.conn.cursor()
             cursor.execute(sql)
@@ -198,6 +214,31 @@ class DatabaseManager:
             logger.info(f"Cleared data for category '{category}' on {date_str}.")
         except sqlite3.Error as e:
             logger.error(f"Failed to clear category {category} for date {date_str}: {e}")
+
+    def get_article_by_id(self, article_id):
+        """Get a single article by its primary key ID."""
+        sql = "SELECT * FROM articles WHERE id = ?"
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(sql, (article_id,))
+            row = cursor.fetchone()
+            return dict(row) if row else None
+        except sqlite3.Error as e:
+            logger.error(f"Failed to get article by ID {article_id}: {e}")
+            return None
+
+    def force_finalize_all_articles(self):
+        """Forces all articles that have been summarized or rated into the 'complete' state."""
+        sql = "UPDATE articles SET status = 'complete' WHERE status IN ('summarized', 'rated', 'selected_for_summary')"
+        try:
+            cursor = self.conn.cursor()
+            updated_rows = cursor.execute(sql).rowcount
+            self.conn.commit()
+            logger.info(f"Force-finalized {updated_rows} articles.")
+            return updated_rows
+        except sqlite3.Error as e:
+            logger.error(f"Failed to force-finalize articles: {e}")
+            return 0
 
     def close(self):
         if self.conn:

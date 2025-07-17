@@ -78,32 +78,34 @@ class ArticleSummarizer:
 
     def summarize_article(self, article):
         """Summarize a single article and update it in the database."""
-        article_id = article['id']
-        title = article['title']
-        content = article['content']
-        url = article['url']
+        try:
+            article_id = article['id']
+            title = article['title']
+            content = article['content']
+            url = article['url']
 
-        if not content:
-            logger.warning(f"Article {title} (ID: {article_id}) has no content to summarize.")
-            return
+            if not content:
+                logger.warning(f"Article {title} (ID: {article_id}) has no content to summarize, skipping.")
+                return
 
-        logger.info(f"Summarizing article ID {article_id}: {title}")
-        
-        chinese_title, chinese_summary = self.get_chinese_title_and_summary(title, content, url)
-        english_summary = self.get_english_summary(title, content)
+            logger.info(f"Summarizing article ID {article_id}: {title}")
+            
+            chinese_title, chinese_summary = self.get_chinese_title_and_summary(title, content, url)
+            english_summary = self.get_english_summary(title, content)
 
-        # Proceed to save even if some parts of the summary are missing.
-        if chinese_title or chinese_summary or english_summary:
-            self.db_manager.update_article_summary(
-                article_id,
-                chinese_title,
-                english_summary,
-                chinese_summary
-            )
-            if self.stats_manager: self.stats_manager.increment('articles_summarized_in_db')
-            logger.info(f"Successfully summarized (possibly partially) and saved to DB: {title}")
-        else:
-            logger.error(f"All summarization attempts failed for article: {title}")
+            if chinese_title or chinese_summary or english_summary:
+                self.db_manager.update_article_summary(
+                    article_id,
+                    chinese_title,
+                    english_summary,
+                    chinese_summary
+                )
+                if self.stats_manager: self.stats_manager.increment('articles_summarized_in_db')
+                logger.info(f"Successfully summarized (possibly partially) and saved to DB: {title}")
+            else:
+                logger.error(f"All summarization attempts failed for article: {title}")
+        except Exception as e:
+            logger.error(f"An unexpected error occurred while summarizing article ID {article.get('id')}: {e}", exc_info=True)
 
     def process(self, category, date_str):
         """

@@ -1,6 +1,7 @@
 import os
 import logging
 import re
+import json
 from concurrent.futures import ThreadPoolExecutor
 
 logger = logging.getLogger(__name__)
@@ -8,21 +9,43 @@ logger = logging.getLogger(__name__)
 class ArticleAnalyzer:
     """Analyzes and rates articles"""
 
-    def __init__(self, db_manager, api_client, rating_criteria, stats_manager=None, top_articles=5, max_workers=10, model="gpt-3.5-turbo"):
+    def __init__(self, db_manager, api_client, criteria_path, stats_manager=None, top_articles=5, max_workers=10, model="gpt-3.5-turbo"):
         self.api_client = api_client
         self.db_manager = db_manager
-        self.rating_criteria = rating_criteria
+        self.criteria_path = criteria_path
         self.top_articles = top_articles
         self.max_workers = max_workers
         self.stats_manager = stats_manager
-        self.model = model  # Store model parameter
-    
-    def get_article_rating(self, content):
+        self.model = model
+        self.rating_criteria = self._load_criteria()
+
+    def _load_criteria(self):
+        """Loads the rating criteria from the JSON file."""
+        try:
+            with open(self.criteria_path, 'r', encoding='utf-8') as f:
+                return json.load(f)
+        except FileNotFoundError:
+            logger.error(f"Criteria file not found at {self.criteria_path}")
+            return {}
+        except json.JSONDecodeError:
+            logger.error(f"Error decoding JSON from {self.criteria_path}")
+            return {}
+
+    def get_article_rating(self, content, category):
         """Get rating for an article using the API"""
+        criteria = self.rating_criteria.get('default', {})
+        criteria.update(self.rating_criteria.get(category, {}))
+        
+        if not criteria:
+            logger.warning(f"No rating criteria found for category: {category}")
+            return None
+
+        criteria_prompt = ", ".join([f"{k} ({v} points)" for k, v in criteria.items()])
+        
         payload = {
-            "model": self.model,  # Use the model from instance
+            "model": self.model,
             "messages": [
-                {"role": "system", "content": f"You are an AI assistant that rates articles strictly based on the criteria: '{self.rating_criteria}'. First, determine if the article strictly matches the criteria. If it does not, respond with 'Not relevant'. If it matches, rate the article based on its value in 'X out of 10' format, where X is a number from 1 to 10."},
+                {"role": "system", "content": f"You are an AI assistant that rates articles strictly based on the criteria: '{criteria_prompt}'. First, determine if the article strictly matches the criteria. If it does not, respond with 'Not relevant'. If it matches, rate the article based on its value in 'X out of 10' format, where X is a number from 1 to 10."},
                 {"role": "user", "content": f"Rate the following article:\n\n{content}"}
             ]
         }
@@ -37,7 +60,10 @@ class ArticleAnalyzer:
                     if self.stats_manager: self.stats_manager.increment('articles_rated_irrelevant')
                     return None
                     
-                match = re.search(r'(\d+(\.\d+)?)\s*out of 10', raw_rating)
+                match = re.search(r'(\d+(\.\d+)?)/10', raw_rating, re.IGNORECASE)
+                if not match:
+                    match = re.search(r'(\d+(\.\d+)?)\s*out of 10', raw_rating, re.IGNORECASE)
+                
                 if match:
                     if self.stats_manager: self.stats_manager.increment('articles_rated_success')
                     return match.group(1)
@@ -53,12 +79,13 @@ class ArticleAnalyzer:
         """Rate a single article"""
         article_id = article['id']
         title = article['title']
+        category = article['category']
         logger.info(f"Rating article: {title}")
 
         if not article['content']:
             return article_id, None
 
-        rating = self.get_article_rating(article['content'])
+        rating = self.get_article_rating(article['content'], category)
         if rating:
             score = float(rating)
             self.db_manager.update_article_score(article_id, score)

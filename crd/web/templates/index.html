@@ -1,36 +1,213 @@
-{% extends "layout.html" %}
-{% block content %}
-    <div class="date-tabs">
-        {% for date in available_dates %}
-            <a href="{{ url_for('home', date=date) }}" class="date-tab {% if date == selected_date %}active{% endif %}">
-                {{ date }}
-            </a>
-        {% endfor %}
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Content Research Digest</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+</head>
+<body>
+    <header>
+        <h1>Content Research Digest</h1>
+        <nav>
+            <a href="/stats" class="button">Data Health</a>
+            <button id="theme-toggle-btn">Toggle Theme</button>
+        </nav>
+    </header>
+
+    <main id="main-content">
+        <div id="articles-container">
+            <!-- Articles will be dynamically loaded here -->
+        </div>
+        <div id="loading-indicator" style="text-align: center; padding: 2rem; display: none;">
+            <p>Loading more articles...</p>
+        </div>
+    </main>
+
+    <!-- Modal for displaying the generated image -->
+    <div id="image-modal" class="modal">
+        <div class="modal-content">
+            <span class="close-button">&times;</span>
+            <h2>Generated Analysis Image</h2>
+            <div id="modal-image-container">
+                <p id="loading-message">Generating, please wait...</p>
+                <img id="modal-image" src="" alt="Generated Analysis Image">
+            </div>
+        </div>
     </div>
 
-    {% if articles_by_category and selected_date %}
-        {% for category, articles in articles_by_category.items() %}
-            <div class="category-section">
-                <h2>{{ category }}</h2>
-                {% for article in articles %}
-                <div class="article">
-                    {% if article.thumbnail %}
-                    <div class="article-thumbnail">
-                        <a href="{{ article.url }}" target="_blank">
-                            <img src="{{ url_for('static', filename='output/' + selected_date + '/' + article.thumbnail) }}" alt="{{ article.original_title }}">
-                        </a>
-                    </div>
-                    {% endif %}
-                    <div class="article-content">
-                        <h3><a href="{{ article.url }}" target="_blank">{{ article.original_title }}</a></h3>
-                        <p>{{ article.english_summary }}</p>
-                        <p><em>Source: <a href="{{ article.url }}" target="_blank">{{ article.source }}</a></em></p>
-                    </div>
-                </div>
-                {% endfor %}
-            </div>
-        {% endfor %}
-    {% else %}
-        <p>No content available for {% if selected_date %}{{ selected_date }}{% else %}today{% endif %}. Please run the pipeline.</p>
-    {% endif %}
-{% endblock %}
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // --- Theme Toggler ---
+            const themeToggleButton = document.getElementById('theme-toggle-btn');
+            const currentTheme = localStorage.getItem('theme') || 'light';
+            document.documentElement.setAttribute('data-theme', currentTheme);
+
+            themeToggleButton.addEventListener('click', () => {
+                let theme = document.documentElement.getAttribute('data-theme');
+                if (theme === 'light') {
+                    theme = 'dark';
+                } else {
+                    theme = 'light';
+                }
+                document.documentElement.setAttribute('data-theme', theme);
+                localStorage.setItem('theme', theme);
+            });
+
+            // --- Infinite Scroll & Lazy Load ---
+            const articlesContainer = document.getElementById('articles-container');
+            const loadingIndicator = document.getElementById('loading-indicator');
+            let isLoading = false;
+            let nextDateToFetch = null; // This will be a Date object in UTC
+
+            function formatDate(date) {
+                const year = date.getUTCFullYear();
+                const month = String(date.getUTCMonth() + 1).padStart(2, '0');
+                const day = String(date.getUTCDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+            const MAX_EMPTY_FETCHES = 5; // Stop if we don't find content after this many tries
+
+            async function fetchAndRenderArticles(dateStr) {
+                if (isLoading || !dateStr) return false;
+                isLoading = true;
+                loadingIndicator.style.display = 'block';
+                let foundContent = false;
+
+                try {
+                    const response = await fetch(`/api/articles?date=${dateStr}`);
+                    if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
+                    const articlesByDate = await response.json();
+
+                    if (Object.keys(articlesByDate).length > 0) {
+                        foundContent = true;
+                        let dateHeader = document.createElement('h2');
+                        dateHeader.className = 'date-header';
+                        dateHeader.textContent = dateStr;
+                        articlesContainer.appendChild(dateHeader);
+
+                        for (const [category, articles] of Object.entries(articlesByDate)) {
+                            let categoryHtml = `<section class="category-section"><h3>${category}</h3><div class="articles-grid">`;
+                            for (const article of articles) {
+                                const thumbnailUrl = article.thumbnail_path ? `{{ url_for('static', filename='output/') }}${dateStr}/${article.thumbnail_path}` : '';
+                                categoryHtml += `
+                                    <article class="article-card">
+                                        ${thumbnailUrl ? 
+                                        `<div class="article-thumbnail-container">
+                                            <img src="${thumbnailUrl}" alt="Thumbnail for ${article.title}" class="article-thumbnail">
+                                        </div>` : ''}
+                                        <div class="article-content">
+                                            <h4><a href="${article.url}" target="_blank">${article.title}</a></h4>
+                                            <p class="article-meta">Source: ${article.source} | Rating: ${article.score || 'N/A'}</p>
+                                            <p class="summary">${article.chinese_summary || 'Summary not available.'}</p>
+                                            <button class="generate-image-btn" data-article-id="${article.id}">Generate Analysis Image</button>
+                                        </div>
+                                    </article>
+                                `;
+                            }
+                            categoryHtml += `</div></section>`;
+                            articlesContainer.innerHTML += categoryHtml;
+                        }
+                    } else {
+                        console.log(`No articles found for ${dateStr}.`);
+                    }
+                } catch (error) {
+                    console.error('Failed to fetch articles:', error);
+                    loadingIndicator.innerHTML = "Failed to load articles.";
+                } finally {
+                    isLoading = false;
+                    loadingIndicator.style.display = 'none';
+                    return foundContent;
+                }
+            }
+
+            const observer = new IntersectionObserver(async (entries) => {
+                if (entries[0].isIntersecting && !isLoading && nextDateToFetch) {
+                    let emptyFetches = 0;
+                    let contentFound = false;
+                    while (!contentFound && emptyFetches < MAX_EMPTY_FETCHES) {
+                        const dateToFetchStr = formatDate(nextDateToFetch);
+                        contentFound = await fetchAndRenderArticles(dateToFetchStr);
+                        nextDateToFetch.setUTCDate(nextDateToFetch.getUTCDate() - 1);
+                        if (!contentFound) {
+                            emptyFetches++;
+                        }
+                    }
+                    if (emptyFetches >= MAX_EMPTY_FETCHES) {
+                        console.log("Stopping scroll search after multiple empty days.");
+                        observer.disconnect();
+                    }
+                }
+            }, { rootMargin: '200px' });
+
+            async function initialize() {
+                try {
+                    const response = await fetch('/api/latest_article_date');
+                    const data = await response.json();
+                    if (data.latest_date) {
+                        const [year, month, day] = data.latest_date.split('-').map(Number);
+                        const latestDate = new Date(Date.UTC(year, month - 1, day));
+                        
+                        await fetchAndRenderArticles(formatDate(latestDate));
+                        
+                        latestDate.setUTCDate(latestDate.getUTCDate() - 1);
+                        nextDateToFetch = latestDate;
+                        
+                        observer.observe(loadingIndicator);
+                    } else {
+                        loadingIndicator.textContent = "No articles found in the database.";
+                        loadingIndicator.style.display = 'block';
+                    }
+                } catch (error) {
+                    console.error("Failed to get the latest article date:", error);
+                    loadingIndicator.textContent = "Error initializing article stream.";
+                    loadingIndicator.style.display = 'block';
+                }
+            }
+
+            initialize();
+
+            // --- Modal Logic (delegated event listener) ---
+            document.getElementById('main-content').addEventListener('click', function(event) {
+                if (event.target.classList.contains('generate-image-btn')) {
+                    const articleId = event.target.dataset.articleId;
+                    const modal = document.getElementById('image-modal');
+                    const modalImage = document.getElementById('modal-image');
+                    const loadingMessage = document.getElementById('loading-message');
+
+                    modal.style.display = 'block';
+                    loadingMessage.style.display = 'block';
+                    modalImage.style.display = 'none';
+                    modalImage.src = '';
+
+                    fetch(`/generate_image/${articleId}`, { method: 'POST' })
+                        .then(response => response.json())
+                        .then(data => {
+                            if (data.image_url) {
+                                modalImage.src = data.image_url + '?t=' + new Date().getTime();
+                                loadingMessage.style.display = 'none';
+                                modalImage.style.display = 'block';
+                            } else {
+                                loadingMessage.textContent = `Error: ${data.error || 'Could not generate image.'}`;
+                            }
+                        })
+                        .catch(error => {
+                            console.error('Error:', error);
+                            loadingMessage.textContent = 'An unexpected error occurred.';
+                        });
+                }
+            });
+
+            const modal = document.getElementById('image-modal');
+            const closeButton = document.querySelector('.close-button');
+            closeButton.onclick = () => { modal.style.display = 'none'; };
+            window.onclick = (event) => {
+                if (event.target == modal) {
+                    modal.style.display = 'none';
+                }
+            };
+        });
+    </script>
+</body>
+</html>

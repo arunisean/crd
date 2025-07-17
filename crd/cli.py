@@ -14,157 +14,151 @@ from .renderer import NewsletterRenderer
 from .utils.stats import StatsManager
 from .utils.api_client import APIClient
 
-def parse_args():
+def create_parser():
     parser = argparse.ArgumentParser(description='Content Research Digest - Newsletter Generator')
-    
-    parser.add_argument('--config', '-c', default='.env',
-                        help='Path to configuration file')
-    parser.add_argument('--output-dir', '-d', default='crd/web/static/output',
-                        help='Directory to store output files')
+    parser.add_argument('--config', '-c', default='.env', help='Path to configuration file')
+    parser.add_argument('--output-dir', '-d', default='crd/web/static/output', help='Directory to store output files')
     parser.add_argument('--db-path', default='crd/crd.db', help='Path to SQLite database file')
-    parser.add_argument('--verbose', '-v', action='store_true',
-                        help='Enable verbose logging')
-    parser.add_argument('--feeds-config', default='feeds.json',
-                        help='Path to feeds configuration JSON file')
-    parser.add_argument('--force', action='store_true',
-                        help='Force re-processing of dates even if output data already exists')
-    parser.add_argument('--force-category',
-                        help='Force re-processing of a specific category even if output data already exists')
-    return parser.parse_args()
+    parser.add_argument('--verbose', '-v', action='store_true', help='Enable verbose logging')
+    parser.add_argument('--feeds-config', default='feeds.json', help='Path to feeds configuration JSON file')
+    parser.add_argument('--news-criteria', default='news_criteria.json', help='Path to news criteria JSON file')
+
+    subparsers = parser.add_subparsers(dest='command', required=True)
+
+    # Process command
+    process_parser = subparsers.add_parser('process', help='Run the full pipeline for a category')
+    process_parser.add_argument('category', help='Category to process')
+    process_parser.add_argument('--date', '-t', help='Target date (YYYY-MM-DD). Defaults to today.')
+    process_parser.add_argument('--force', action='store_true', help='Force re-processing by clearing existing data for the category and date.')
+
+    # Fetch command
+    fetch_parser = subparsers.add_parser('fetch', help='Fetch articles for a category')
+    fetch_parser.add_argument('category', help='Category to fetch')
+    fetch_parser.add_argument('--date', '-t', help='Target date (YYYY-MM-DD). Defaults to today.')
+    fetch_parser.add_argument('--force', action='store_true', help='Force re-fetching by clearing existing data for the category and date.')
+
+    # Analyze command
+    analyze_parser = subparsers.add_parser('analyze', help='Analyze articles for a category')
+    analyze_parser.add_argument('category', help='Category to analyze')
+    analyze_parser.add_argument('--date', '-t', help='Target date (YYYY-MM-DD). Defaults to today.')
+
+    # Summarize command
+    summarize_parser = subparsers.add_parser('summarize', help='Summarize articles for a category')
+    summarize_parser.add_argument('category', help='Category to summarize')
+    summarize_parser.add_argument('--date', '-t', help='Target date (YYYY-MM-DD). Defaults to today.')
+
+    # Render command
+    render_parser = subparsers.add_parser('render', help='Render assets for a category')
+    render_parser.add_argument('category', help='Category to render')
+    render_parser.add_argument('--date', '-t', help='Target date (YYYY-MM-DD). Defaults to today.')
+
+    # Finalize command
+    finalize_parser = subparsers.add_parser('finalize', help='Manually finalize articles.')
+    finalize_parser.add_argument('--date', '-t', help='Target date (YYYY-MM-DD) to finalize.')
+    finalize_parser.add_argument('--category', '-c', help='Category to finalize.')
+    finalize_parser.add_argument('--all-stuck', action='store_true', help='Force finalize all articles stuck in intermediate states.')
+
+    return parser
 
 def main():
-    args = parse_args()
-    
-    # Setup logging
+    parser = create_parser()
+    args = parser.parse_args()
+
     log_level = logging.DEBUG if args.verbose else logging.INFO
     logger = setup_logger('crd', level=log_level)
-    
-    logger.info(f"Current working directory: {os.getcwd()}")
-    logger.info(f"Output directory: {args.output_dir}")
 
-    # Load configuration
     config = Config(args.config, args.feeds_config)
-    
-    # Setup API client
     api_client = APIClient(config.api_url, config.api_key)
-    
-    # Setup Database
-    db_manager = DatabaseManager(args.db_path)
-
-    # Setup Stats Manager
     stats_manager = StatsManager()
 
-    # Create output directory
     os.makedirs(args.output_dir, exist_ok=True)
-    
-    # Loop through the last 3 days to ensure data is up-to-date
-    for i in range(3):
-        try:
-            target_date = datetime.now().date() - timedelta(days=i)
-            date_str = target_date.strftime('%Y-%m-%d')
-            output_dir_for_date = os.path.join(args.output_dir, date_str)
-            os.makedirs(output_dir_for_date, exist_ok=True)
 
-            # Check for forced category
-            is_force_category = args.force_category and args.force_category.lower() in [c.lower() for c in config.feeds_config.keys()]
+    db_manager = None
+    try:
+        db_manager = DatabaseManager(args.db_path)
+        target_date = datetime.strptime(args.date, '%Y-%m-%d').date() if args.date else datetime.now().date()
+        date_str = target_date.strftime('%Y-%m-%d')
+        output_dir_for_date = os.path.join(args.output_dir, date_str)
+        os.makedirs(output_dir_for_date, exist_ok=True)
 
-            # If not forcing, check if we can skip
-            if not args.force and not is_force_category:
-                # A more reliable check is to see if the DB has 'complete' articles for the date.
-                if db_manager.has_complete_articles(date_str):
-                    logger.info(f"Data for {date_str} appears complete in DB. Skipping.")
-                    continue
-
+        if args.command == 'process':
             if args.force:
-                logger.info(f"Force-processing all categories for {date_str}.")
+                logger.info(f"Force-updating category '{args.category}' for {date_str}.")
+                db_manager.clear_category_for_date(args.category, date_str)
+            
+            run_fetch(logger, db_manager, config, args, stats_manager, target_date, date_str)
+            run_analyze(logger, db_manager, api_client, config, args, stats_manager, date_str)
+            run_summarize(logger, db_manager, api_client, config, args, stats_manager, date_str)
+            run_render(logger, db_manager, args, stats_manager, date_str, output_dir_for_date)
 
-            logger.info(f"--- Generating data for {date_str} ---")
+        elif args.command == 'fetch':
+            if args.force:
+                logger.info(f"Force-fetching category '{args.category}' for {date_str}.")
+                db_manager.clear_category_for_date(args.category, date_str)
+            run_fetch(logger, db_manager, config, args, stats_manager, target_date, date_str)
+        elif args.command == 'analyze':
+            run_analyze(logger, db_manager, api_client, config, args, stats_manager, date_str)
+        elif args.command == 'summarize':
+            run_summarize(logger, db_manager, api_client, config, args, stats_manager, date_str)
+        elif args.command == 'render':
+            run_render(logger, db_manager, args, stats_manager, date_str, output_dir_for_date)
+        elif args.command == 'finalize':
+            if args.all_stuck:
+                logger.info("Forcibly finalizing all stuck articles across all dates.")
+                db_manager.force_finalize_all_articles()
+            elif args.date and args.category:
+                logger.info(f"Finalizing articles for category '{args.category}' on {args.date}.")
+                db_manager.finalize_articles_status(args.category, args.date)
+            else:
+                logger.warning("Please provide --date and --category to finalize, or use --all-stuck.")
 
-            for category, settings in config.feeds_config.items():
-                try:
-                    # If forcing a specific category, clear its old data for the day
-                    if is_force_category and category.lower() == args.force_category.lower():
-                        logger.info(f"Force-updating category '{category}' for {date_str}.")
-                        db_manager.clear_category_for_date(category, date_str)
-                    elif is_force_category and category.lower() != args.force_category.lower():
-                        continue
+    finally:
+        if db_manager:
+            db_manager.close()
+        stats_manager.report()
 
-                    logger.info(f"--- Processing category: {category} for {date_str} ---")
-
-                    # 1. Fetch articles
-                    with stats_manager.time_block(f"fetch_{category}"):
-                        fetcher = ArticleFetcher(
-                            db_manager=db_manager,
-                            stats_manager=stats_manager,
-                            target_date=target_date,
-                            max_workers=config.threads,
-                            keywords=config.keywords
-                        )
-                        articles = fetcher.fetch_all_articles(settings['feeds'])
-                        articles_with_category = [(art, category) for art in articles]
-                        use_playwright = settings.get('use_playwright', False)
-                        fetcher.process_articles(articles_with_category, use_playwright=use_playwright)
-
-                    # 2. Rate articles and select top ones
-                    with stats_manager.time_block(f"analyze_{category}"):
-                        analyzer = ArticleAnalyzer(
-                            db_manager=db_manager,
-                            api_client=api_client,
-                            rating_criteria=settings['rating_criteria'],
-                            stats_manager=stats_manager,
-                            top_articles=config.top_articles,
-                            max_workers=config.threads,
-                            model=config.rating_model
-                        )
-                        analyzer.process(category, date_str)
-
-                    # 3. Summarize high-rated articles
-                    with stats_manager.time_block(f"summarize_{category}"):
-                        summarizer = ArticleSummarizer(
-                            db_manager=db_manager,
-                            api_client=api_client,
-                            stats_manager=stats_manager,
-                            model=config.summary_model,
-                            max_workers=config.threads
-                        )
-                        summarizer.process(category, date_str)
-
-                    # 4. Process thumbnails
-                    with stats_manager.time_block(f"thumbnails_{category}"):
-                        thumbnails_dir = os.path.join(output_dir_for_date, 'thumbnails')
-                        renderer = NewsletterRenderer(db_manager=db_manager, stats_manager=stats_manager)
-                        renderer.process_thumbnails(category, date_str, thumbnails_dir)
-
-                    # 5. Finalize status
-                    with stats_manager.time_block(f"finalize_{category}"):
-                        logger.info(f"Finalizing status for articles in '{category}' on {date_str}.")
-                        db_manager.finalize_articles_status(category, date_str)
-
-                except Exception as e:
-                    logger.error(f"Failed to process category '{category}' for {date_str}. Skipping.", exc_info=True)
-                    continue
-
-            # 5. Generate final assets for the date (e.g., top news image)
-            with stats_manager.time_block(f"render_final_{date_str}"):
-                logger.info(f"--- Finalizing assets for {date_str} ---")
-                renderer = NewsletterRenderer(
-                    db_manager=db_manager,
-                    stats_manager=stats_manager,
-                    title=config.newsletter_title,
-                    font=config.newsletter_font,
-                    width=config.width
-                )
-                renderer.process(date_str, output_dir_for_date)
-
-            logger.info(f"Successfully generated data for {date_str}")
-
-        except Exception as e:
-            logger.error(f"A critical error occurred processing date index {i}: {e}", exc_info=True)
-            continue # Continue to the next day
-    
-    db_manager.close()
-    stats_manager.report()
     return 0
+
+def run_fetch(logger, db_manager, config, args, stats_manager, target_date, date_str):
+    logger.info(f"--- Fetching category: {args.category} for {date_str} ---")
+    fetcher = ArticleFetcher(
+        db_manager=db_manager,
+        feeds_path=args.feeds_config,
+        stats_manager=stats_manager,
+        target_date=target_date,
+        max_workers=config.threads,
+        keywords=config.keywords
+    )
+    fetcher.process(args.category, date_str)
+
+def run_analyze(logger, db_manager, api_client, config, args, stats_manager, date_str):
+    logger.info(f"--- Analyzing category: {args.category} for {date_str} ---")
+    analyzer = ArticleAnalyzer(
+        db_manager=db_manager,
+        api_client=api_client,
+        criteria_path=args.news_criteria,
+        stats_manager=stats_manager,
+        top_articles=config.top_articles,
+        max_workers=config.threads,
+        model=config.rating_model
+    )
+    analyzer.process(args.category, date_str)
+
+def run_summarize(logger, db_manager, api_client, config, args, stats_manager, date_str):
+    logger.info(f"--- Summarizing category: {args.category} for {date_str} ---")
+    summarizer = ArticleSummarizer(
+        db_manager=db_manager,
+        api_client=api_client,
+        stats_manager=stats_manager,
+        model=config.summary_model,
+        max_workers=config.threads
+    )
+    summarizer.process(args.category, date_str)
+
+def run_render(logger, db_manager, args, stats_manager, date_str, output_dir_for_date):
+    logger.info(f"--- Rendering category: {args.category} for {date_str} ---")
+    renderer = NewsletterRenderer(db_manager=db_manager, stats_manager=stats_manager)
+    renderer.process(args.category, date_str, output_dir_for_date)
 
 if __name__ == "__main__":
     sys.exit(main())

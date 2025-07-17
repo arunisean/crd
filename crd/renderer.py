@@ -159,31 +159,35 @@ class NewsletterRenderer:
         articles_to_process = self.db_manager.get_articles_by_status('summarized', category, date_str)
 
         for article in articles_to_process:
-            thumbnail_rel_path = None
-            safe_filename = self.sanitize_filename(article['title'])
+            try:
+                thumbnail_rel_path = None
+                safe_filename = self.sanitize_filename(article['title'])
 
-            thumbnail_url = self.get_thumbnail(article['url'])
-            if thumbnail_url:
-                ext = os.path.splitext(urlparse(thumbnail_url).path)[1]
-                if not ext or len(ext) > 5:
-                    ext = '.jpg'
-                thumbnail_filename = f"{safe_filename}{ext}"
-                thumbnail_abs_path = os.path.join(thumbnails_dir, thumbnail_filename)
-                if self.download_thumbnail(thumbnail_url, thumbnail_abs_path):
-                    thumbnail_rel_path = os.path.join('thumbnails', thumbnail_filename)
-                    if self.stats_manager:
-                        self.stats_manager.increment('thumbnails_downloaded')
-            else:
-                logger.info(f"No thumbnail found for {article['url']}. Attempting to take a screenshot.")
-                screenshot_filename = f"{safe_filename}.png"
-                screenshot_abs_path = os.path.join(thumbnails_dir, screenshot_filename)
-                if self.screenshot_article(article['url'], screenshot_abs_path):
-                    thumbnail_rel_path = os.path.join('thumbnails', screenshot_filename)
-                    if self.stats_manager:
-                        self.stats_manager.increment('thumbnails_screenshotted')
+                thumbnail_url = self.get_thumbnail(article['url'])
+                if thumbnail_url:
+                    ext = os.path.splitext(urlparse(thumbnail_url).path)[1]
+                    if not ext or len(ext) > 5:
+                        ext = '.jpg'
+                    thumbnail_filename = f"{safe_filename}{ext}"
+                    thumbnail_abs_path = os.path.join(thumbnails_dir, thumbnail_filename)
+                    if self.download_thumbnail(thumbnail_url, thumbnail_abs_path):
+                        thumbnail_rel_path = os.path.join('thumbnails', thumbnail_filename)
+                        if self.stats_manager:
+                            self.stats_manager.increment('thumbnails_downloaded')
+                else:
+                    logger.info(f"No thumbnail found for {article['url']}. Attempting to take a screenshot.")
+                    screenshot_filename = f"{safe_filename}.png"
+                    screenshot_abs_path = os.path.join(thumbnails_dir, screenshot_filename)
+                    if self.screenshot_article(article['url'], screenshot_abs_path):
+                        thumbnail_rel_path = os.path.join('thumbnails', screenshot_filename)
+                        if self.stats_manager:
+                            self.stats_manager.increment('thumbnails_screenshotted')
 
-            if thumbnail_rel_path:
-                self.db_manager.update_article_thumbnail(article['id'], thumbnail_rel_path)
+                if thumbnail_rel_path:
+                    self.db_manager.update_article_thumbnail(article['id'], thumbnail_rel_path)
+                    self.db_manager.finalize_articles_status(article['category'], article['fetch_date'])
+            except Exception as e:
+                logger.error(f"An unexpected error occurred while processing thumbnail for article ID {article.get('id')}: {e}", exc_info=True)
 
     def screenshot_article(self, url, output_path):
         """Takes a screenshot of the top part of a webpage."""
@@ -291,14 +295,15 @@ class NewsletterRenderer:
 
         return
 
-    def process(self, date_str, output_dir_for_date):
+    def process(self, category, date_str, output_dir_for_date):
         """Process all steps to render newsletter assets like images."""
-        summaries_data = self.db_manager.get_summarized_articles_for_date(date_str)
+        summaries_data = self.db_manager.get_summarized_articles_for_category_and_date(category, date_str)
         # Generate top news image only if there are summaries
         if summaries_data:
             thumbnails_dir = os.path.join(output_dir_for_date, 'thumbnails')
             os.makedirs(thumbnails_dir, exist_ok=True)
-            top_news_image_path = os.path.join(output_dir_for_date, "top_news.png")
-            self.generate_top_news_image(summaries_data, top_news_image_path)
+            top_news_image_path = os.path.join(output_dir_for_date, f"top_news_{category}.png")
+            self.generate_top_news_image({category: summaries_data}, top_news_image_path)
+            self.process_thumbnails(category, date_str, thumbnails_dir)
             return True
         return False
