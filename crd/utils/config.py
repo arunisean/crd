@@ -29,7 +29,15 @@ class Config:
         self.threads = int(os.getenv("THREADS", 10))
         self.date_range_days = int(os.getenv("DATE_RANGE_DAYS", 7))
         self.top_articles = int(os.getenv("TOP_ARTICLES", 10))
-        self.minimum_score = float(os.getenv("MINIMUM_SCORE", 6.5))
+        
+        # Minimum score settings
+        self.minimum_score_map = {
+            "AI & Tech": float(os.getenv("MINIMUM_SCORE_AI_TECH", 6.5)),
+            "Crypto": float(os.getenv("MINIMUM_SCORE_CRYPTO", 6.5)),
+            "Academic": float(os.getenv("MINIMUM_SCORE_ACADEMIC", 6.5)),
+        }
+        self.minimum_score = float(os.getenv("MINIMUM_SCORE", 6.5)) # Default
+        
         self.keywords = os.getenv("KEYWORDS", "").split(',') if os.getenv("KEYWORDS") else []
 
     def load_feeds_config(self, config_path):

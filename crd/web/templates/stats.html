@@ -7,43 +7,56 @@
         <a href="{{ url_for('home') }}" class="btn btn-outline-primary"><i class="bi bi-house-door me-2"></i>Back to Home</a>
     </div>
 
-    {% set stats_by_date = stats|groupby('fetch_date') %}
-
-    {% for group in stats_by_date %}
-    <div class="col-12">
-        <h2 class="date-header display-6 pb-2 mb-4 mt-3 border-bottom"><i class="bi bi-calendar-event me-3"></i>{{ group.grouper }}</h2>
-    </div>
-
+    {% if stats %}
     <div class="row g-4">
-        {% for category, items in group.list|groupby('category') %}
-        <div class="col-md-6 col-lg-4 d-flex">
-            <div class="card h-100 w-100 shadow-sm">
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
                 <div class="card-header bg-light d-flex align-items-center">
                     <i class="bi bi-tag-fill me-2"></i>
-                    <h5 class="card-title mb-0">{{ category }}</h5>
+                    <h5 class="card-title mb-0">Articles per Category</h5>
                 </div>
                 <div class="card-body">
                     <ul class="list-group list-group-flush">
-                        {% set status_map = {
-                            'fetched': {'icon': 'bi-cloud-download', 'color': 'info', 'label': 'Fetched'},
-                            'selected_for_summary': {'icon': 'bi-star', 'color': 'warning', 'label': 'Selected'},
-                            'summarized': {'icon': 'bi-body-text', 'color': 'success', 'label': 'Summarized'}
-                        } %}
-                        {% for item in items %}
-                        {% set status = status_map.get(item.status, {'icon': 'bi-question-circle', 'color': 'secondary', 'label': item.status}) %}
+                        {% for category, count in stats.articles_per_category.items() %}
                         <li class="list-group-item d-flex justify-content-between align-items-center px-2">
-                            <span>
-                                <i class="bi {{ status.icon }} text-{{ status.color }} me-2"></i>
-                                {{ status.label }}
-                            </span>
-                            <span class="badge bg-{{ status.color }}-subtle text-{{ status.color }}-emphasis rounded-pill">{{ item.count }}</span>
+                            <span>{{ category }}</span>
+                            <span class="badge bg-primary-subtle text-primary-emphasis rounded-pill">{{ count }}</span>
                         </li>
                         {% endfor %}
                     </ul>
                 </div>
             </div>
         </div>
-        {% endfor %}
+        <div class="col-md-6">
+            <div class="card h-100 shadow-sm">
+                <div class="card-header bg-light d-flex align-items-center">
+                    <i class="bi bi-star-fill me-2"></i>
+                    <h5 class="card-title mb-0">Average Score per Category</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        {% for category, avg_score in stats.avg_score_per_category.items() %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-2">
+                            <span>{{ category }}</span>
+                            <span class="badge bg-success-subtle text-success-emphasis rounded-pill">{{ "%.2f"|format(avg_score) }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="mt-5">
+        <h2 class="display-6 pb-2 mb-4 mt-3 border-bottom"><i class="bi bi-calendar-event me-3"></i>Articles per Day</h2>
+        <ul class="list-group">
+            {% for date, count in stats.articles_per_day.items() %}
+            <li class="list-group-item d-flex justify-content-between align-items-center">
+                {{ date }}
+                <span class="badge bg-info-subtle text-info-emphasis rounded-pill">{{ count }}</span>
+            </li>
+            {% endfor %}
+        </ul>
     </div>
     {% else %}
     <div class="text-center p-5 rounded bg-light mt-4">
@@ -51,6 +64,6 @@
         <h2 class="fw-light">No Statistics Found</h2>
         <p class="lead text-muted">The database does not contain any article processing information yet.</p>
     </div>
-    {% endfor %}
+    {% endif %}
 </div>
 {% endblock %}

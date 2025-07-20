@@ -198,9 +198,10 @@ class NewsletterRenderer:
 
                 if thumbnail_rel_path:
                     self.db_manager.update_article_thumbnail(article['id'], thumbnail_rel_path)
-                    self.db_manager.finalize_articles_status(article['category'], article['fetch_date'])
             except Exception as e:
-                logger.error(f"An unexpected error occurred while processing thumbnail for article ID {article.get('id')}: {e}", exc_info=True)
+                logger.error(f"An unexpected error occurred while processing thumbnail for article ID {article['id']}: {e}", exc_info=True)
+                # Mark the article as failed so it's not picked up again
+                self.db_manager.finalize_stuck_articles(article['category'], article['fetch_date'])
 
     def screenshot_article(self, url, output_path):
         """Takes a screenshot of the top part of a webpage."""

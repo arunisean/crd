@@ -24,7 +24,7 @@ def get_db():
 def close_db(error):
     db = g.pop('db', None)
     if db is not None:
-        db.close()
+        db.close_conn()
 
 # --- Routes ---
 @app.route('/')
@@ -57,6 +57,12 @@ def api_available_dates():
     db = get_db()
     dates = db.get_available_dates()
     return jsonify(dates)
+
+@app.route('/stats')
+def stats():
+    db = get_db()
+    stats_data = db.get_stats()
+    return render_template('stats.html', stats=stats_data)
 
 @app.route('/share/<int:article_id>')
 def share_article(article_id):
@@ -131,5 +137,10 @@ def generate_image(article_id):
         return jsonify({'error': 'Failed to generate image'}), 500
 
 if __name__ == '__main__':
+    import argparse
+    parser = argparse.ArgumentParser(description="Run the CRD Flask web server.")
+    parser.add_argument('--port', type=int, default=5000, help='Port to run the server on.')
+    args = parser.parse_args()
+
     os.makedirs(OUTPUT_DIR, exist_ok=True)
-    app.run(debug=True, host='0.0.0.0', port=5000)
+    app.run(debug=True, host='0.0.0.0', port=args.port)

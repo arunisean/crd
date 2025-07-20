@@ -9,12 +9,12 @@ logger = logging.getLogger(__name__)
 class ArticleAnalyzer:
     """Analyzes and rates articles"""
 
-    def __init__(self, db_manager, api_client, criteria_path, stats_manager=None, top_articles=10, min_score=6.5, max_workers=10, model="gpt-3.5-turbo"):
+    def __init__(self, db_manager, api_client, criteria_path, stats_manager=None, top_articles=10, min_score_map=None, max_workers=10, model="gpt-3.5-turbo"):
         self.api_client = api_client
         self.db_manager = db_manager
         self.criteria_path = criteria_path
         self.top_articles = top_articles
-        self.min_score = min_score
+        self.min_score_map = min_score_map if min_score_map is not None else {}
         self.max_workers = max_workers
         self.stats_manager = stats_manager
         self.model = model
@@ -105,11 +105,16 @@ class ArticleAnalyzer:
 
         # Rate articles concurrently
         with ThreadPoolExecutor(max_workers=self.max_workers) as executor:
-            list(executor.map(self.rate_single_article, articles_to_rate))
+            futures = [executor.submit(self.rate_single_article, article) for article in articles_to_rate]
+            for future in futures:
+                future.result()  # Wait for all futures to complete
+
+        # Get the minimum score for the current category
+        min_score = self.min_score_map.get(category, 6.5)
 
         # Select top articles and mark them for summarization
         top_article_ids = self.db_manager.select_top_articles_for_summary(
-            category, date_str, self.top_articles, self.min_score
+            category, date_str, self.top_articles, min_score
         )
         logger.info(f"Selected {len(top_article_ids)} top articles for category '{category}' for summarization.")
 
