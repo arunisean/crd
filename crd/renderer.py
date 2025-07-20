@@ -22,39 +22,52 @@ class NewsletterRenderer:
         self.width = width
 
     def _render_html_to_png(self, html_file_path, output_png_path):
-        """Renders an HTML file to a PNG image using Playwright."""
+        """Renders an HTML file to a PNG image using Playwright with dynamic height."""
         device_pixel_ratio = 2  # For HiDPI
+        min_height = 300
+        max_height = 1200
+        padding = 40 * device_pixel_ratio # 40px padding
+
         with sync_playwright() as p:
             browser = p.chromium.launch()
             page = browser.new_page(device_scale_factor=device_pixel_ratio)
             
+            # Set a default viewport to load the page
             page.set_viewport_size({"width": self.width, "height": 1000})
             
             page.goto(f"file://{os.path.abspath(html_file_path)}", wait_until='networkidle', timeout=60000)
-            
-            page.evaluate("""() => {
-                document.body.style.padding = '40px';
-                document.body.style.fontSize = '24px';
-                document.body.style.boxSizing = 'border-box';
-            }""")
-            
-            page.wait_for_load_state("networkidle", timeout=60000)
-            
-            height = page.evaluate("document.documentElement.scrollHeight")
-            
-            page.set_viewport_size({"width": self.width, "height": height})
-            
-            screenshot = page.screenshot(full_page=True)
+
+            # Calculate dynamic height based on the content-wrapper div
+            try:
+                element_handle = page.query_selector('#content-wrapper')
+                if not element_handle:
+                    raise ValueError("Content wrapper element not found")
+                
+                bounding_box = element_handle.bounding_box()
+                if not bounding_box:
+                    raise ValueError("Could not get bounding box of content wrapper")
+
+                content_height = bounding_box['height']
+                
+                # Add some vertical padding to the height
+                final_height = int(content_height) + 80 # 40px padding top + 40px bottom
+
+                page.set_viewport_size({"width": self.width, "height": final_height})
+                
+                screenshot = page.screenshot()
+            except Exception as e:
+                logger.error(f"Failed to calculate dynamic height or take screenshot: {e}")
+                # Fallback to a default size screenshot if dynamic calculation fails
+                page.set_viewport_size({"width": self.width, "height": 600})
+                screenshot = page.screenshot()
             
             browser.close()
         
         with open(output_png_path, 'wb') as f:
             f.write(screenshot)
         
-        image = Image.open(output_png_path)
-        image = image.crop((0, 0, self.width * device_pixel_ratio, height * device_pixel_ratio))
-        image.save(output_png_path)
-        logger.info(f"Rendered {html_file_path} to {output_png_path}")
+        # No need to crop if viewport is set correctly
+        logger.info(f"Rendered {html_file_path} to {output_png_path} with dynamic height: {final_height}px")
     
     def get_youtube_thumbnail(self, url):
         """Get thumbnail URL for a YouTube video"""
@@ -237,73 +250,104 @@ class NewsletterRenderer:
         except requests.RequestException:
             return False
     
-    def generate_top_news_image(self, summaries_data, output_path):
-        """Generate a single PNG image with the top news content."""
+    def generate_article_analysis_image(self, article_data, output_path):
+        """Generate a single PNG image for a single article."""
+        
+        # Make thumbnail path absolute for rendering
+        if article_data.get('thumbnail_path'):
+            # Correctly locate the output directory relative to this script
+            # The script is in crd/, the assets are in crd/web/static/output/
+            base_dir = os.path.abspath(os.path.join(os.path.dirname(__file__), 'web', 'static', 'output'))
+            thumbnail_abs_path = os.path.join(base_dir, article_data['fetch_date'], article_data['thumbnail_path'])
+            
+            # Ensure the path is correct and the file exists before adding it
+            if os.path.exists(thumbnail_abs_path):
+                article_data['thumbnail_abs_path'] = f"file://{thumbnail_abs_path}"
+            else:
+                logger.warning(f"Thumbnail not found at expected path: {thumbnail_abs_path}")
+
         # Create HTML content for the image
         html_content = f"""
         <!DOCTYPE html>
         <html>
         <head>
-            <title>Top News</title>
+            <title>{article_data['title']}</title>
             <style>
                 body {{
                     font-family: Arial, sans-serif;
-                    padding: 20px;
+                    margin: 0;
+                    padding: 40px;
+                    background-color: #f0f2f5;
                 }}
-                h1 {{
-                    font-size: 24px;
+                #content-wrapper {{
+                    border: 1px solid #ddd;
+                    padding: 20px;
+                    border-radius: 10px;
+                    background-color: white;
+                    display: inline-block; /* Fit to content */
+                }}
+                img.thumbnail {{
+                    width: 100%;
+                    max-height: 300px;
+                    object-fit: cover;
+                    border-radius: 5px;
+                    margin-bottom: 15px;
+                }}
+                h2 {{
+                    font-size: 28px;
+                    color: #333;
                 }}
                 p {{
-                    font-size: 16px;
+                    font-size: 18px;
+                    color: #555;
+                    line-height: 1.6;
+                }}
+                .source {{
+                    font-size: 14px;
+                    color: #888;
                 }}
             </style>
         </head>
         <body>
-            <h1>Top News</h1>
-        """
-        for category, articles in summaries_data.items():
-            for data in articles:
-                logger.info(f"URL: {data['url']}")
-                html_content += f"""
-                <div>
-                    <h2>{data['chinese_title']}</h2>
-                    <p>{data['chinese_summary']}</p>
-                    <p>Source: <a href="{data['source']}">{data['source'].replace("www.", "")}</a></p>
-                </div>
-                """
-        html_content += """
+            <div id="content-wrapper">
+                {f'<img src="{article_data["thumbnail_abs_path"]}" class="thumbnail" alt="Article Thumbnail">' if article_data.get('thumbnail_abs_path') else ''}
+                <h2>{article_data['chinese_title']}</h2>
+                <p>{article_data['chinese_summary']}</p>
+                <p class="source">Source: <a href="{article_data['url']}">{article_data['source'].replace("www.", "")}</a></p>
+            </div>
         </body>
         </html>
         """
 
         # Create a temporary HTML file
-        html_filename = os.path.join(os.path.dirname(output_path), "top_news.html")
+        html_filename = os.path.join(os.path.dirname(output_path), f"analysis_{article_data['id']}.html")
         if write_file(html_filename, html_content):
             try:
                 self._render_html_to_png(html_filename, output_path)
-                logger.info(f"Top news image generated and saved to {output_path}")
+                logger.info(f"Article analysis image generated and saved to {output_path}")
                 if self.stats_manager:
-                    self.stats_manager.increment('top_news_image_generated')
+                    self.stats_manager.increment('article_analysis_image_generated')
             except Exception as e:
-                logger.error(f"Error generating top news image: {e}", exc_info=True)
+                logger.error(f"Error generating article analysis image: {e}", exc_info=True)
             finally:
                 # Clean up temporary HTML file
                 if os.path.exists(html_filename):
                     os.remove(html_filename)
         else:
-            logger.error("Failed to create temporary HTML file for top news image")
-
-        return
+            logger.error("Failed to create temporary HTML file for article analysis image")
 
     def process(self, category, date_str, output_dir_for_date):
         """Process all steps to render newsletter assets like images."""
         summaries_data = self.db_manager.get_summarized_articles_for_category_and_date(category, date_str)
-        # Generate top news image only if there are summaries
+        # Generate analysis image for each summarized article
         if summaries_data:
             thumbnails_dir = os.path.join(output_dir_for_date, 'thumbnails')
             os.makedirs(thumbnails_dir, exist_ok=True)
-            top_news_image_path = os.path.join(output_dir_for_date, f"top_news_{category}.png")
-            self.generate_top_news_image({category: summaries_data}, top_news_image_path)
+            for article in summaries_data:
+                safe_filename = self.sanitize_filename(article['title'])
+                image_filename = f"analysis_{safe_filename}.png"
+                image_path = os.path.join(output_dir_for_date, image_filename)
+                self.generate_article_analysis_image(article, image_path)
             self.process_thumbnails(category, date_str, thumbnails_dir)
             return True
         return False

@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ article.title }}</title>
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="article">
+    <meta property="og:url" content="{{ article.url }}">
+    <meta property="og:title" content="{{ article.title }}">
+    <meta property="og:description" content="{{ article.english_summary or article.chinese_summary }}">
+    <meta property="og:image" content="{{ image_full_url }}">
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image">
+    <meta property="twitter:url" content="{{ article.url }}">
+    <meta property="twitter:title" content="{{ article.title }}">
+    <meta property="twitter:description" content="{{ article.english_summary or article.chinese_summary }}">
+    <meta property="twitter:image" content="{{ image_full_url }}">
+
+    <style>
+        body { font-family: sans-serif; text-align: center; padding: 40px; background-color: #f8f9fa; color: #343a40; }
+        img { max-width: 80%; max-height: 70vh; border: 1px solid #dee2e6; border-radius: 8px; box-shadow: 0 4px 8px rgba(0,0,0,0.1); }
+        a { color: #007bff; }
+        .container { max-width: 800px; margin: auto; }
+        .redirect-message { margin-top: 20px; font-size: 0.9em; color: #6c757d; }
+    </style>
+    <!-- Redirect to the original article after a short delay -->
+    <script>
+        setTimeout(function() {
+            window.location.href = "{{ article.url }}";
+        }, 3000);
+    </script>
+</head>
+<body>
+    <div class="container">
+        <h1>{{ article.title }}</h1>
+        <p>Sharing analysis...</p>
+        <img src="{{ image_url_for_template }}" alt="Article Analysis">
+        <p class="redirect-message">You will be redirected to the original article shortly.</p>
+        <p class="redirect-message">If you are not redirected, <a href="{{ article.url }}">click here</a>.</p>
+    </div>
+</body>
+</html>
