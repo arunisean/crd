@@ -108,7 +108,7 @@ def main():
                 db_manager.force_finalize_all_articles()
             elif args.date and args.category:
                 logger.info(f"Finalizing articles for category '{args.category}' on {args.date}.")
-                db_manager.finalize_articles_status(args.category, args.date)
+                db_manager.finalize_stuck_articles(args.category, args.date)
             else:
                 logger.warning("Please provide --date and --category to finalize, or use --all-stuck.")
 

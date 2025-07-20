@@ -203,6 +203,16 @@ class DatabaseManager:
             logger.error(f"Failed to get article by ID {article_id}: {e}")
             return None
 
+    def finalize_stuck_articles(self, category, date_str):
+        sql = "UPDATE articles SET status = 'failed' WHERE category = ? AND fetch_date < ? AND status IN ('fetched', 'rated')"
+        try:
+            cursor = self.conn.cursor()
+            cursor.execute(sql, (category, date_str))
+            self.conn.commit()
+            logger.info(f"Finalized {cursor.rowcount} stuck articles for category '{category}' before {date_str}.")
+        except sqlite3.Error as e:
+            logger.error(f"Failed to finalize stuck articles for category {category}: {e}")
+
     def close(self):
         if self.conn:
             self.conn.close()
