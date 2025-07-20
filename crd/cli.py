@@ -139,6 +139,7 @@ def run_analyze(logger, db_manager, api_client, config, args, stats_manager, dat
         criteria_path=args.news_criteria,
         stats_manager=stats_manager,
         top_articles=config.top_articles,
+        min_score=config.minimum_score,
         max_workers=config.threads,
         model=config.rating_model
     )

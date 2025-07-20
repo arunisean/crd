@@ -9,11 +9,12 @@ logger = logging.getLogger(__name__)
 class ArticleAnalyzer:
     """Analyzes and rates articles"""
 
-    def __init__(self, db_manager, api_client, criteria_path, stats_manager=None, top_articles=5, max_workers=10, model="gpt-3.5-turbo"):
+    def __init__(self, db_manager, api_client, criteria_path, stats_manager=None, top_articles=10, min_score=6.5, max_workers=10, model="gpt-3.5-turbo"):
         self.api_client = api_client
         self.db_manager = db_manager
         self.criteria_path = criteria_path
         self.top_articles = top_articles
+        self.min_score = min_score
         self.max_workers = max_workers
         self.stats_manager = stats_manager
         self.model = model
@@ -45,7 +46,7 @@ class ArticleAnalyzer:
         payload = {
             "model": self.model,
             "messages": [
-                {"role": "system", "content": f"You are an AI assistant that rates articles strictly based on the criteria: '{criteria_prompt}'. First, determine if the article strictly matches the criteria. If it does not, respond with 'Not relevant'. If it matches, rate the article based on its value in 'X out of 10' format, where X is a number from 1 to 10."},
+                {"role": "system", "content": f"You are an AI assistant that rates articles strictly based on the criteria: '{criteria_prompt}'. First, determine if the article strictly matches the criteria. If it does not, respond with 'Not relevant'. If it matches, you must first provide a one-sentence reason for your rating, followed by the rating itself in the format 'Rating: X/10', where X is a number from 1 to 10."},
                 {"role": "user", "content": f"Rate the following article:\n\n{content}"}
             ]
         }
@@ -58,19 +59,20 @@ class ArticleAnalyzer:
                 
                 if raw_rating.lower() == "not relevant":
                     if self.stats_manager: self.stats_manager.increment('articles_rated_irrelevant')
-                    return None
+                    return None, None
                     
-                match = re.search(r'(\d+(\.\d+)?)/10', raw_rating, re.IGNORECASE)
-                if not match:
-                    match = re.search(r'(\d+(\.\d+)?)\s*out of 10', raw_rating, re.IGNORECASE)
+                match = re.search(r'Rating:\s*(\d+(\.\d+)?)/10', raw_rating, re.IGNORECASE)
                 
                 if match:
+                    score = match.group(1)
+                    reason_match = re.match(r'(.*?)Rating:', raw_rating, re.DOTALL | re.IGNORECASE)
+                    reason = reason_match.group(1).strip() if reason_match else "No reason provided."
                     if self.stats_manager: self.stats_manager.increment('articles_rated_success')
-                    return match.group(1)
+                    return score, reason
                 else:
                     logger.warning(f"Unexpected rating format: {raw_rating}")
                     if self.stats_manager: self.stats_manager.increment('articles_rated_failed_format')
-                    return None
+                    return None, None
             except Exception as e:
                 logger.error(f"Error getting rating: {e}")
                 return None
@@ -83,17 +85,16 @@ class ArticleAnalyzer:
         logger.info(f"Rating article: {title}")
 
         if not article['content']:
-            return article_id, None
+            return article_id, None, None
 
-        rating = self.get_article_rating(article['content'], category)
-        if rating:
-            score = float(rating)
-            self.db_manager.update_article_score(article_id, score)
-            logger.info(f"Rating for {title}: {score} out of 10")
-            return article_id, score
+        score, reason = self.get_article_rating(article['content'], category)
+        if score:
+            self.db_manager.update_article_score_and_reason(article_id, float(score), reason)
+            logger.info(f"Rating for {title}: {score}/10. Reason: {reason}")
+            return article_id, score, reason
 
         logger.warning(f"Failed to get rating for {title}")
-        return article_id, None
+        return article_id, None, None
 
     def process(self, category, date_str):
         """Process all articles for a category: rate them and select top ones"""
@@ -107,7 +108,9 @@ class ArticleAnalyzer:
             list(executor.map(self.rate_single_article, articles_to_rate))
 
         # Select top articles and mark them for summarization
-        top_article_ids = self.db_manager.select_top_articles_for_summary(category, date_str, self.top_articles)
+        top_article_ids = self.db_manager.select_top_articles_for_summary(
+            category, date_str, self.top_articles, self.min_score
+        )
         logger.info(f"Selected {len(top_article_ids)} top articles for category '{category}' for summarization.")
 
         return top_article_ids

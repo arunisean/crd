@@ -1,56 +1,56 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Data Health Check</title>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
-    <style>
-        body { padding: 2rem; }
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-top: 1rem;
-        }
-        th, td {
-            border: 1px solid #ddd;
-            padding: 8px;
-            text-align: left;
-        }
-        th {
-            background-color: #f2f2f2;
-        }
-    </style>
-</head>
-<body>
-    <h1>Data Health Check</h1>
-    <p>This page shows the number of articles in the database, grouped by date, category, and status.</p>
-    <nav>
-        <a href="/">Back to Home</a>
-    </nav>
-    <table>
-        <thead>
-            <tr>
-                <th>Fetch Date</th>
-                <th>Category</th>
-                <th>Status</th>
-                <th>Article Count</th>
-            </tr>
-        </thead>
-        <tbody>
-            {% for row in stats %}
-            <tr>
-                <td>{{ row.fetch_date }}</td>
-                <td>{{ row.category }}</td>
-                <td>{{ row.status }}</td>
-                <td>{{ row.count }}</td>
-            </tr>
-            {% else %}
-            <tr>
-                <td colspan="4">No statistics found.</td>
-            </tr>
-            {% endfor %}
-        </tbody>
-    </table>
-</body>
-</html>
+{% extends 'layout.html' %}
+
+{% block content %}
+<div class="container mt-4 mb-5">
+    <div class="d-flex justify-content-between align-items-center mb-4">
+        <h1 class="display-5"><i class="bi bi-kanban me-3"></i>Data Health Dashboard</h1>
+        <a href="{{ url_for('home') }}" class="btn btn-outline-primary"><i class="bi bi-house-door me-2"></i>Back to Home</a>
+    </div>
+
+    {% set stats_by_date = stats|groupby('fetch_date') %}
+
+    {% for group in stats_by_date %}
+    <div class="col-12">
+        <h2 class="date-header display-6 pb-2 mb-4 mt-3 border-bottom"><i class="bi bi-calendar-event me-3"></i>{{ group.grouper }}</h2>
+    </div>
+
+    <div class="row g-4">
+        {% for category, items in group.list|groupby('category') %}
+        <div class="col-md-6 col-lg-4 d-flex">
+            <div class="card h-100 w-100 shadow-sm">
+                <div class="card-header bg-light d-flex align-items-center">
+                    <i class="bi bi-tag-fill me-2"></i>
+                    <h5 class="card-title mb-0">{{ category }}</h5>
+                </div>
+                <div class="card-body">
+                    <ul class="list-group list-group-flush">
+                        {% set status_map = {
+                            'fetched': {'icon': 'bi-cloud-download', 'color': 'info', 'label': 'Fetched'},
+                            'selected_for_summary': {'icon': 'bi-star', 'color': 'warning', 'label': 'Selected'},
+                            'summarized': {'icon': 'bi-body-text', 'color': 'success', 'label': 'Summarized'}
+                        } %}
+                        {% for item in items %}
+                        {% set status = status_map.get(item.status, {'icon': 'bi-question-circle', 'color': 'secondary', 'label': item.status}) %}
+                        <li class="list-group-item d-flex justify-content-between align-items-center px-2">
+                            <span>
+                                <i class="bi {{ status.icon }} text-{{ status.color }} me-2"></i>
+                                {{ status.label }}
+                            </span>
+                            <span class="badge bg-{{ status.color }}-subtle text-{{ status.color }}-emphasis rounded-pill">{{ item.count }}</span>
+                        </li>
+                        {% endfor %}
+                    </ul>
+                </div>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% else %}
+    <div class="text-center p-5 rounded bg-light mt-4">
+        <i class="bi bi-x-circle display-1 d-block mb-3 text-muted"></i>
+        <h2 class="fw-light">No Statistics Found</h2>
+        <p class="lead text-muted">The database does not contain any article processing information yet.</p>
+    </div>
+    {% endfor %}
+</div>
+{% endblock %}

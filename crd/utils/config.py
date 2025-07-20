@@ -28,7 +28,8 @@ class Config:
         # Processing settings
         self.threads = int(os.getenv("THREADS", 10))
         self.date_range_days = int(os.getenv("DATE_RANGE_DAYS", 7))
-        self.top_articles = int(os.getenv("TOP_ARTICLES", 5))
+        self.top_articles = int(os.getenv("TOP_ARTICLES", 10))
+        self.minimum_score = float(os.getenv("MINIMUM_SCORE", 6.5))
         self.keywords = os.getenv("KEYWORDS", "").split(',') if os.getenv("KEYWORDS") else []
 
     def load_feeds_config(self, config_path):

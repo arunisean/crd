@@ -6,3 +6,4 @@ crd/__pycache__/*
 *.pyc
 venv/*
 crd/web/static/output/
+*.db
