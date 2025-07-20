@@ -7,6 +7,9 @@ The Content Research Digest (CRD) is an automated pipeline that fetches articles
 - **Multi-Source Categorization**: Fetch news from different categories (e.g., Crypto, AI, Academic), each with its own set of RSS feeds and rating criteria defined in `feeds.json`.
 - **AI-Powered Rating & Summarization**: Uses an OpenAI-compatible API to rate articles and generate both English and Chinese summaries.
 - **Database Backend**: Uses SQLite to store all fetched articles, ratings, and summaries, providing a persistent and queryable data store.
+- **Modern UI**: A responsive, modern web interface built with Bootstrap.
+- **Statistics Page**: A dedicated page to view content statistics.
+- **Sharing Functionality**: Share articles with a custom-generated analysis image.
 - **Web Interface**: A simple Flask-based web application to display the generated digest.
 - **Automated Pipeline**: A command-line interface to run the entire process from fetching to rendering.
 - **Extensible Configuration**: Easily configure API keys, models, and sources through a `.env` file.
@@ -28,6 +31,9 @@ crd/
 │       ├── app.py
 │       ├── static/
 │       └── templates/
+│           ├── index.html
+│           ├── stats.html
+│           └── ...
 ├── .env.example         # Example environment file
 ├── .gitignore
 ├── feeds.json           # Feeds and criteria configuration
@@ -98,7 +104,8 @@ To view the generated content, start the Flask web server.
 python -m crd.web.app
 ```
 
-Now, open your browser and navigate to `http://127.0.0.1:5000`.
+- **Main Page**: Open your browser and navigate to `http://127.0.0.1:5000`.
+- **Stats Page**: Access statistics at `http://127.0.0.1:5000/stats`.
 
 ## Automation
 
